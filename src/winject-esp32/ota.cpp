@@ -1,0 +1,436 @@
+#include "ota.h"
+
+#include "config.h"
+#include "control_peer.h"
+
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/socket.h>
+
+#include "esp_http_server.h"
+#include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "lwip/sockets.h"
+#include "manager.h"
+
+static const char* TAG = "ota";
+static httpd_handle_t g_httpd = nullptr;
+static manager* g_netmgr = nullptr;
+static esp_timer_handle_t g_ota_validate_timer = nullptr;
+
+static bool http_update_peer_allowed(httpd_req_t* req)
+{
+    const int fd = httpd_req_to_sockfd(req);
+    if (fd < 0)
+    {
+        return false;
+    }
+    sockaddr_storage peer = {};
+    socklen_t peer_len = sizeof(peer);
+    if (getpeername(fd, reinterpret_cast<sockaddr*>(&peer), &peer_len) != 0)
+    {
+        return false;
+    }
+    uint32_t addr_be = 0;
+    if (peer.ss_family == AF_INET)
+    {
+        addr_be = reinterpret_cast<sockaddr_in*>(&peer)->sin_addr.s_addr;
+    }
+    else if (peer.ss_family == AF_INET6)
+    {
+        const auto* in6 = reinterpret_cast<sockaddr_in6*>(&peer);
+        const uint8_t* b = in6->sin6_addr.s6_addr;
+        if (b[0] == 0 && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0 &&
+            b[5] == 0 && b[6] == 0 && b[7] == 0 && b[8] == 0 && b[9] == 0 &&
+            b[10] == 0xff && b[11] == 0xff)
+        {
+            addr_be = (static_cast<uint32_t>(b[12]) << 24) |
+                      (static_cast<uint32_t>(b[13]) << 16) |
+                      (static_cast<uint32_t>(b[14]) << 8) |
+                      static_cast<uint32_t>(b[15]);
+        }
+    }
+    return control_peer_allowed(addr_be);
+}
+
+static void stop_ota_validate_timer()
+{
+    if (g_ota_validate_timer == nullptr)
+    {
+        return;
+    }
+    esp_timer_stop(g_ota_validate_timer);
+    esp_timer_delete(g_ota_validate_timer);
+    g_ota_validate_timer = nullptr;
+}
+
+static void ota_validate_tick(void* arg)
+{
+    (void)arg;
+    if (g_netmgr == nullptr || !g_netmgr->link_up())
+    {
+        return;
+    }
+    uint32_t ip = 0;
+    if (!g_netmgr->local_ipv4(&ip))
+    {
+        return;
+    }
+    if (esp_timer_get_time() <
+        static_cast<int64_t>(OTA_VALIDATE_UPTIME_S) * 1000000LL)
+    {
+        return;
+    }
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    if (running == nullptr)
+    {
+        return;
+    }
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    if (esp_ota_get_state_partition(running, &state) != ESP_OK ||
+        state != ESP_OTA_IMG_PENDING_VERIFY)
+    {
+        stop_ota_validate_timer();
+        return;
+    }
+    if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK)
+    {
+        ESP_LOGI(TAG, "OTA image marked valid after %u s uptime",
+                 static_cast<unsigned>(OTA_VALIDATE_UPTIME_S));
+    }
+    else
+    {
+        ESP_LOGW(TAG, "OTA mark valid failed");
+    }
+    stop_ota_validate_timer();
+}
+
+static void start_ota_validate_timer_if_needed()
+{
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    if (running == nullptr)
+    {
+        return;
+    }
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    if (esp_ota_get_state_partition(running, &state) != ESP_OK ||
+        state != ESP_OTA_IMG_PENDING_VERIFY)
+    {
+        return;
+    }
+    if (g_ota_validate_timer != nullptr)
+    {
+        return;
+    }
+    ESP_LOGI(TAG, "OTA image pending verify; starting validation timer");
+    const esp_timer_create_args_t args = {
+        .callback = &ota_validate_tick,
+        .arg = nullptr,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "ota_valid",
+        .skip_unhandled_events = true,
+    };
+    if (esp_timer_create(&args, &g_ota_validate_timer) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "OTA validation timer create failed");
+        g_ota_validate_timer = nullptr;
+        return;
+    }
+    esp_timer_start_periodic(g_ota_validate_timer, 1000000);
+}
+
+static void ipv4ToString(uint32_t addr, char* out, size_t outLen)
+{
+    const uint8_t* b = reinterpret_cast<const uint8_t*>(&addr);
+    snprintf(out, outLen, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+}
+
+static esp_err_t handleRoot(httpd_req_t* req)
+{
+    char ethStr[16] = "down";
+    uint32_t ip = 0;
+    if (g_netmgr != nullptr && g_netmgr->local_ipv4(&ip))
+    {
+        ipv4ToString(ip, ethStr, sizeof(ethStr));
+    }
+
+    char page[640];
+    snprintf(
+        page, sizeof(page),
+        "<!DOCTYPE html><html><body>"
+        "<h1>WInject-ESP32</h1>"
+        "<p>eth %s</p>"
+        "<p>HTTP POST /update</p>"
+        "<form method='POST' action='/update' enctype='multipart/form-data'>"
+        "<input type='file' name='firmware'>"
+        "<input type='submit' value='Update'>"
+        "</form></body></html>",
+        ethStr);
+    httpd_resp_set_type(req, "text/html");
+    return httpd_resp_send(req, page, HTTPD_RESP_USE_STRLEN);
+}
+
+static bool multipartBoundary(httpd_req_t* req, char* marker, size_t markerLen)
+{
+    char type[160] = {};
+    if (httpd_req_get_hdr_value_str(req, "Content-Type", type, sizeof(type)) !=
+        ESP_OK)
+    {
+        return false;
+    }
+    const char* found = nullptr;
+    for (const char* p = type; *p != '\0'; p++)
+    {
+        if (strncasecmp(p, "boundary=", 9) == 0)
+        {
+            found = p;
+            break;
+        }
+    }
+    if (found == nullptr)
+    {
+        return false;
+    }
+    found += 9;
+    if (*found == '"')
+    {
+        found++;
+    }
+    char token[72] = {};
+    size_t i = 0;
+    while (*found && *found != '"' && *found != ';' && *found != ' ' &&
+           i + 1 < sizeof(token))
+    {
+        token[i++] = *found++;
+    }
+    if (i == 0)
+    {
+        return false;
+    }
+    snprintf(marker, markerLen, "\r\n--%s", token);
+    return true;
+}
+
+static const uint8_t* findBytes(const uint8_t* data, size_t len,
+                                const char* pat, size_t patLen)
+{
+    if (patLen == 0 || len < patLen)
+    {
+        return nullptr;
+    }
+    for (size_t i = 0; i + patLen <= len; i++)
+    {
+        if (memcmp(data + i, pat, patLen) == 0)
+        {
+            return data + i;
+        }
+    }
+    return nullptr;
+}
+
+static esp_err_t handleUpdate(httpd_req_t* req)
+{
+    if (!http_update_peer_allowed(req))
+    {
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden\n");
+        return ESP_FAIL;
+    }
+    const esp_partition_t* update = esp_ota_get_next_update_partition(nullptr);
+    if (update == nullptr)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            "no ota partition\n");
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t ota = 0;
+    if (esp_ota_begin(update, OTA_WITH_SEQUENTIAL_WRITES, &ota) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            "ota begin failed\n");
+        return ESP_FAIL;
+    }
+
+    char boundary[80] = {};
+    const bool multipart = multipartBoundary(req, boundary, sizeof(boundary));
+    const size_t boundaryLen = strlen(boundary);
+
+    uint8_t buf[1024];
+    uint8_t head[1024];
+    size_t headLen = 0;
+    bool inBody = !multipart;
+    uint8_t tail[80];
+    size_t tailLen = 0;
+    int remaining = req->content_len;
+    bool ok = true;
+    bool sawEnd = !multipart;
+
+    while (remaining > 0 && ok)
+    {
+        const int want = remaining < static_cast<int>(sizeof(buf))
+                             ? remaining
+                             : static_cast<int>(sizeof(buf));
+        const int n = httpd_req_recv(req, reinterpret_cast<char*>(buf), want);
+        if (n <= 0)
+        {
+            ok = false;
+            break;
+        }
+        remaining -= n;
+        const uint8_t* p = buf;
+        size_t left = static_cast<size_t>(n);
+
+        if (!inBody)
+        {
+            if (headLen + left > sizeof(head))
+            {
+                ok = false;
+                break;
+            }
+            memcpy(head + headLen, p, left);
+            headLen += left;
+            const uint8_t* blank = findBytes(head, headLen, "\r\n\r\n", 4);
+            if (blank == nullptr)
+            {
+                continue;
+            }
+            inBody = true;
+            const size_t skip = static_cast<size_t>(blank - head) + 4;
+            p = head + skip;
+            left = headLen - skip;
+        }
+
+        if (left == 0)
+        {
+            continue;
+        }
+
+        if (!multipart)
+        {
+            if (esp_ota_write(ota, p, left) != ESP_OK)
+            {
+                ok = false;
+            }
+            continue;
+        }
+
+        uint8_t window[1024 + 80];
+        memcpy(window, tail, tailLen);
+        memcpy(window + tailLen, p, left);
+        const size_t winLen = tailLen + left;
+        const uint8_t* bound = findBytes(window, winLen, boundary, boundaryLen);
+        if (bound != nullptr)
+        {
+            const size_t dataLen = static_cast<size_t>(bound - window);
+            if (dataLen > 0 && esp_ota_write(ota, window, dataLen) != ESP_OK)
+            {
+                ok = false;
+            }
+            sawEnd = true;
+            break;
+        }
+        const size_t keep = boundaryLen > 1 ? boundaryLen - 1 : 0;
+        if (winLen > keep)
+        {
+            if (esp_ota_write(ota, window, winLen - keep) != ESP_OK)
+            {
+                ok = false;
+                break;
+            }
+            memcpy(tail, window + (winLen - keep), keep);
+            tailLen = keep;
+        }
+        else
+        {
+            memcpy(tail, window, winLen);
+            tailLen = winLen;
+        }
+    }
+
+    if (!ok || (multipart && !sawEnd))
+    {
+        esp_ota_abort(ota);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            "update failed\n");
+        return ESP_FAIL;
+    }
+
+    if (esp_ota_end(ota) != ESP_OK ||
+        esp_ota_set_boot_partition(update) != ESP_OK)
+    {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            "update failed\n");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "HTTP OTA %s", update->label);
+    httpd_resp_sendstr(req, "ok, rebooting\n");
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
+    return ESP_OK;
+}
+
+void otaBegin(manager& netmgr)
+{
+    g_netmgr = &netmgr;
+    if (g_httpd != nullptr)
+    {
+        return;
+    }
+
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.server_port = OTA_HTTP_PORT;
+    config.core_id = APP_TASK_CORE;
+    config.stack_size = 8192;
+    // Default 7 reserves almost all of LWIP_MAX_SOCKETS for OTA sessions.
+    // One concurrent upload is enough; leave fd budget for radio upstreams.
+    config.max_open_sockets = 2;
+    config.lru_purge_enable = true;
+    config.recv_wait_timeout = 30;
+    config.send_wait_timeout = 30;
+    if (httpd_start(&g_httpd, &config) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "httpd start failed");
+        g_httpd = nullptr;
+        return;
+    }
+
+    const httpd_uri_t root = {
+        .uri = "/",
+        .method = HTTP_GET,
+        .handler = handleRoot,
+        .user_ctx = nullptr,
+    };
+    const httpd_uri_t update = {
+        .uri = "/update",
+        .method = HTTP_POST,
+        .handler = handleUpdate,
+        .user_ctx = nullptr,
+    };
+    httpd_register_uri_handler(g_httpd, &root);
+    httpd_register_uri_handler(g_httpd, &update);
+
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+    if (next == nullptr)
+    {
+        ESP_LOGE(TAG, "HTTP :%u/update no ota partition (running %s)",
+                 OTA_HTTP_PORT, running != nullptr ? running->label : "?");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "HTTP :%u/update running=%s next=%s", OTA_HTTP_PORT,
+                 running != nullptr ? running->label : "?", next->label);
+    }
+    start_ota_validate_timer_if_needed();
+}
+
+bool otaActive()
+{
+    return g_httpd != nullptr;
+}

@@ -1,0 +1,67 @@
+CONFIG_IDF_TARGET="esp32"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_MONITOR_BAUD=115200
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y
+# WiFi driver on core 0; tcpip / app on core 1.
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU1=y
+
+# Keep RF on while STA is disconnected (monitor/inject, no AP association).
+# CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE is not set
+
+# Legacy OFDM_54M inject delivers shorter, burstier MPDUs; default 4+16 RX
+# buffers drops promisc callbacks before wifi_rx (USB mon0 still sees air).
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+# Cap WiFi TX DMA buffers — large rings contend with EMAC RX under inject.
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
+# Raw inject is one MPDU per datagram (TX AMPDU off). RX AMPDU must stay on so
+# HT MCS frames reach promiscuous with Addr3 at offset 16 (off → MCS4 peer RX=0).
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMSDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_IRAM_OPT=y
+CONFIG_ESP_WIFI_RX_IRAM_OPT=y
+CONFIG_LWIP_IRAM_OPTIMIZATION=y
+
+# Inject floods ~90 pkt/s×burst under WiFi NO_MEM; 64 mbox ≈ 64×MTU and
+# caps SO_RCVBUF usefulness (64 datagrams in the mbox).
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64
+CONFIG_LWIP_SO_RCVBUF=y
+
+# App needs: HTTP OTA (+3 internal), console listen+clients, reactor wake
+# socks, 3x sut UDP, sur/ci/logger UDP. Default 10 is exhausted by OTA's
+# HTTP OTA uses max_open_sockets=2 (ota.cpp).
+CONFIG_LWIP_MAX_SOCKETS=20
+
+# CONFIG_LWIP_DHCPS is not set
+
+CONFIG_ETH_USE_ESP32_EMAC=y
+# Standard 1500-byte IP MTU → 1514-byte L2 frame (no FCS in driver buffer).
+# Saves ~3.8 KiB EMAC DMA RAM vs 1600 (28 RX + 16 TX bufs on lan-module).
+CONFIG_ETH_DMA_BUFFER_SIZE=1514
+# Extra RX descriptors so EMAC can hold frames while WiFi TX owns the bus.
+# Default 28; sdkconfig.wt32-eth01 uses 16 for that board.
+CONFIG_ETH_DMA_RX_BUFFER_NUM=28
+CONFIG_ETH_DMA_TX_BUFFER_NUM=16
+
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ETH_SOFT_FLOW_CONTROL=y
+
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_APP_ROLLBACK_ENABLE=y

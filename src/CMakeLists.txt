@@ -1,0 +1,57 @@
+set(winject_srcs
+    "winject-esp32/config_types.cpp"
+    "winject-esp32/console.cpp"
+    "winject-esp32/diag/ether_test.cpp"
+    "winject-esp32/diag/test_run.cpp"
+    "winject-esp32/diag/wifi_tx_test.cpp"
+    "winject-esp32/mplane/device_backend_esp.cpp"
+    "winject-esp32/mplane/mplane_args.cpp"
+    "winject-esp32/mplane/mplane_commands.cpp"
+    "winject-esp32/mplane/mplane_reply.cpp"
+    "winject-esp32/mplane/mplane_req_id.cpp"
+    "winject-esp32/mplane/radio_backend_esp.cpp"
+    "winject-esp32/mplane/test_backend_esp.cpp"
+    "winject-esp32/netmgr/dhcp_client.cpp"
+    "winject-esp32/netmgr/ethernet_rmii.cpp"
+    "winject-esp32/netmgr/eth_dma_burst.cpp"
+    "winject-esp32/netmgr/manager.cpp"
+    "winject-esp32/ota.cpp"
+    "winject-esp32/endpoint/upstream_rx_endpoint.cpp"
+    "winject-esp32/endpoint/upstream_tx_endpoint.cpp"
+    "winject-esp32/radio/fcs.cpp"
+    "winject-esp32/radio/frame.cpp"
+    "winject-esp32/radio/packet.cpp"
+    "winject-esp32/radio/wifi.cpp"
+    "winject-esp32/radio/wifi_rx.cpp"
+    "winject-esp32/radio/wifi_tx.cpp"
+    "winject-esp32/settings.cpp"
+    "winject-esp32/settings_blob.cpp"
+)
+
+idf_component_register(
+    SRCS ${winject_srcs} "winject-esp32/main.cpp"
+    INCLUDE_DIRS
+        "."
+        "winject-esp32"
+        "winject-esp32/diag"
+        "winject-esp32/mplane"
+        "winject-esp32/netmgr"
+        "winject-esp32/endpoint"
+        "winject-esp32/radio"
+    REQUIRES
+        app_update
+        esp_driver_gpio
+        esp_driver_uart
+        esp_eth
+        esp_event
+        esp_http_server
+        esp_netif
+        esp_rom
+        esp_timer
+        esp_wifi
+        lwip
+        nvs_flash
+        spi_flash
+)
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-missing-field-initializers)
