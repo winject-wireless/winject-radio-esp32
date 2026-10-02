@@ -27,6 +27,10 @@ public:
                UBaseType_t prio = UPSTREAM_RX_TASK_PRIO,
                uint32_t stack_bytes = UPSTREAM_RX_TASK_STACK);
 
+    uint32_t ether_pkt() const;
+    uint32_t dropped_no_peer() const;
+    uint32_t dropped_send_failed() const;
+
 private:
     upstream_rx_endpoint() = default;
 
@@ -44,6 +48,9 @@ private:
     uint16_t peer_port_ = 0;
     int64_t last_peer_poll_us_ = 0;
     bfc::socket sock_;
+    std::atomic<uint32_t> ether_pkt_{0};
+    std::atomic<uint32_t> dropped_no_peer_{0};
+    std::atomic<uint32_t> dropped_send_failed_{0};
 };
 
 #endif  // WINJECT_UPSTREAM_RX_ENDPOINT_H_

@@ -124,6 +124,31 @@ uint8_t wifi_tx::in_flight() const
     return static_cast<uint8_t>(in_flight_.load(std::memory_order_relaxed));
 }
 
+uint32_t wifi_tx::dropped_invalid_frame() const
+{
+    return dropped_invalid_frame_.load(std::memory_order_relaxed);
+}
+
+uint32_t wifi_tx::dropped_tx_queue() const
+{
+    return dropped_tx_queue_.load(std::memory_order_relaxed);
+}
+
+uint32_t wifi_tx::dropped_wifi() const
+{
+    return dropped_wifi_.load(std::memory_order_relaxed);
+}
+
+uint32_t wifi_tx::air_pkt() const
+{
+    return air_pkt_.load(std::memory_order_relaxed);
+}
+
+void wifi_tx::note_invalid_frame()
+{
+    dropped_invalid_frame_.fetch_add(1, std::memory_order_relaxed);
+}
+
 static void delay_us(uint32_t us)
 {
     if (us == 0)
@@ -146,7 +171,16 @@ bool wifi_tx::enqueue(packet&& pkt)
         return false;
     }
     std::optional<packet> item(std::move(pkt));
-    return q.try_push(std::move(item));
+    if (q.try_push(std::move(item)))
+    {
+        return true;
+    }
+    dropped_tx_queue_.fetch_add(1, std::memory_order_relaxed);
+    if (item.has_value())
+    {
+        item->reset();
+    }
+    return false;
 }
 
 uint8_t wifi_tx::queue_size() const
@@ -164,6 +198,7 @@ void wifi_tx::reset_in_flight()
     const uint32_t prev = in_flight_.exchange(0, std::memory_order_relaxed);
     if (prev != 0)
     {
+        dropped_wifi_.fetch_add(prev, std::memory_order_relaxed);
         ESP_LOGW(TAG, "reset in_flight from %u", static_cast<unsigned>(prev));
     }
     last_progress_us_.store(esp_timer_get_time(), std::memory_order_relaxed);
@@ -196,7 +231,7 @@ void wifi_tx::wait_for_driver_slot()
     }
 }
 
-void wifi_tx::release_driver_slot()
+bool wifi_tx::release_driver_slot()
 {
     // Clamped: TX-done also fires for driver-originated frames.
     uint32_t n = in_flight_.load(std::memory_order_relaxed);
@@ -205,10 +240,12 @@ void wifi_tx::release_driver_slot()
     {
     }
     last_progress_us_.store(esp_timer_get_time(), std::memory_order_relaxed);
+    return n > 0;
 }
 
 void wifi_tx::note_inject_fail(esp_err_t err)
 {
+    dropped_wifi_.fetch_add(1, std::memory_order_relaxed);
     ++fail_count_;
     const int64_t now = esp_timer_get_time();
     if (now - fail_log_us_ < k_fail_log_interval_us)
@@ -296,6 +333,7 @@ void wifi_tx::run()
         if (out.data() == nullptr || out.size() < WIFI_RADIO_INJECT_MIN ||
             out.size() > WIFI_RADIO_INJECT_MAX)
         {
+            note_invalid_frame();
             continue;
         }
 
@@ -381,8 +419,19 @@ bool wifi_tx::set_tx_power(int8_t dbm)
 
 void wifi_tx::on_tx_done(const esp_80211_tx_info_t* info)
 {
-    (void)info;
-    wifi::instance().tx().release_driver_slot();
+    wifi_tx& tx = wifi::instance().tx();
+    if (!tx.release_driver_slot())
+    {
+        return;
+    }
+    if (info != nullptr && info->tx_status == WIFI_SEND_SUCCESS)
+    {
+        tx.air_pkt_.fetch_add(1, std::memory_order_relaxed);
+    }
+    else
+    {
+        tx.dropped_wifi_.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 bool wifi_tx::apply_tx_done_cb()

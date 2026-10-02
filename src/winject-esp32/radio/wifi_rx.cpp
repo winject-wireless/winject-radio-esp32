@@ -53,6 +53,21 @@ uint8_t wifi_rx::queue_size() const
     return q.size();
 }
 
+uint32_t wifi_rx::dropped_filter_mismatched() const
+{
+    return dropped_filter_mismatched_.load(std::memory_order_relaxed);
+}
+
+uint32_t wifi_rx::dropped_rx_queue() const
+{
+    return dropped_rx_queue_.load(std::memory_order_relaxed);
+}
+
+uint32_t wifi_rx::air_pkt() const
+{
+    return air_pkt_.load(std::memory_order_relaxed);
+}
+
 mac_filter wifi_rx::filter_addr3() const
 {
     return mac_filter_unpack(filter_addr3_.load(std::memory_order_relaxed));
@@ -134,11 +149,11 @@ bool wifi_rx::test_accept(const uint8_t* mpdu) const
     return true;
 }
 
-void wifi_rx::count_test(const uint8_t* frame, size_t mpdu_len)
+void wifi_rx::count_test(size_t mpdu_len, uint8_t rx_state)
 {
     test_pkt_.fetch_add(1, std::memory_order_relaxed);
     test_byt_.fetch_add(mpdu_len, std::memory_order_relaxed);
-    if (!wifi_fcs_matches(frame, mpdu_len + WIFI_FCS_LEN))
+    if (rx_state != 0)
     {
         test_fcs_err_.fetch_add(1, std::memory_order_relaxed);
     }
@@ -150,10 +165,12 @@ void wifi_rx::on_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type)
     {
         return;
     }
+    air_pkt_.fetch_add(1, std::memory_order_relaxed);
     // HT MCS inject may be classified as CTRL/MISC on ESP32 promisc; Addr3 match
     // still uses the MPDU in payload when sig_len is valid.
     if (type != WIFI_PKT_DATA && type != WIFI_PKT_MISC && type != WIFI_PKT_CTRL)
     {
+        dropped_filter_mismatched_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
 
@@ -163,14 +180,16 @@ void wifi_rx::on_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type)
     // for a single MPDU; ampdu_cnt alone is not a reliable drop signal.
     if (rx.aggregation != 0 && rx.ampdu_cnt > 1)
     {
+        dropped_filter_mismatched_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
 
-    // sig_len includes the 4-byte FCS, which is forwarded unchanged so the
-    // peer can verify it (frames with a bad FCS are delivered too).
+    // sig_len includes the on-air FCS, but ESP-IDF does not copy it into
+    // payload; we append a fcs=SIGNAL trailer instead (see write_fcs_signal).
     const size_t total = rx.sig_len;
     if (total < WIFI_HDR_LEN + WIFI_FCS_LEN || total > WIFI_RX_PACKET_CAP)
     {
+        dropped_filter_mismatched_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     const size_t mpdu_len = total - WIFI_FCS_LEN;
@@ -179,29 +198,40 @@ void wifi_rx::on_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type)
     const bool test_hit = test_accept(frame);
     if (test_hit)
     {
-        count_test(frame, mpdu_len);
+        count_test(mpdu_len, static_cast<uint8_t>(rx.rx_state));
     }
     const bool forward = forward_accept(frame, mpdu_len);
     if (!forward && !test_hit)
     {
+        dropped_filter_mismatched_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     rssi_.store(static_cast<int8_t>(rx.rssi), std::memory_order_relaxed);
     rssi_valid_.store(true, std::memory_order_release);
     if (!forward)
     {
+        dropped_filter_mismatched_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
 
     packet p = packet_allocator::rx().allocate();
     if (!p.is_valid())
     {
+        dropped_rx_queue_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     memcpy(p.data(), frame, total);
+    write_fcs_signal(p.data() + mpdu_len, static_cast<uint8_t>(rx.rx_state));
     p.set_packet_size(total);
     std::optional<packet> item(std::move(p));
-    q.try_push(std::move(item));
+    if (!q.try_push(std::move(item)))
+    {
+        dropped_rx_queue_.fetch_add(1, std::memory_order_relaxed);
+        if (item.has_value())
+        {
+            item->reset();
+        }
+    }
 }
 
 void wifi_rx::promiscuous_cb(void* buf, wifi_promiscuous_pkt_type_t type)

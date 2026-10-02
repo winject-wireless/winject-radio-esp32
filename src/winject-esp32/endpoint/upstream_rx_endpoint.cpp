@@ -1,6 +1,5 @@
 #include "upstream_rx_endpoint.h"
 
-#include "control_peer.h"
 #include "packet.h"
 #include "wifi_rx.h"
 
@@ -16,6 +15,21 @@ upstream_rx_endpoint& upstream_rx_endpoint::instance()
 {
     static upstream_rx_endpoint inst;
     return inst;
+}
+
+uint32_t upstream_rx_endpoint::ether_pkt() const
+{
+    return ether_pkt_.load(std::memory_order_relaxed);
+}
+
+uint32_t upstream_rx_endpoint::dropped_no_peer() const
+{
+    return dropped_no_peer_.load(std::memory_order_relaxed);
+}
+
+uint32_t upstream_rx_endpoint::dropped_send_failed() const
+{
+    return dropped_send_failed_.load(std::memory_order_relaxed);
 }
 
 void upstream_rx_endpoint::poll_peer()
@@ -40,10 +54,6 @@ void upstream_rx_endpoint::poll_peer()
         {
             continue;
         }
-        if (!control_peer_allowed(from.sin_addr.s_addr))
-        {
-            continue;
-        }
         if (!peer_valid_ || peer_host_ != from.sin_addr.s_addr ||
             peer_port_ != from.sin_port)
         {
@@ -62,6 +72,7 @@ void upstream_rx_endpoint::send_one(const uint8_t* data, size_t len)
 {
     if (!peer_valid_)
     {
+        dropped_no_peer_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
     sockaddr_in addr = {};
@@ -71,10 +82,16 @@ void upstream_rx_endpoint::send_one(const uint8_t* data, size_t len)
     const ssize_t n =
         sock_.send(data, len, 0, reinterpret_cast<const sockaddr*>(&addr),
                    sizeof(addr));
-    if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+    if (n < 0)
     {
-        ESP_LOGD(TAG, "sendto failed: %d", errno);
+        dropped_send_failed_.fetch_add(1, std::memory_order_relaxed);
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            ESP_LOGD(TAG, "sendto failed: %d", errno);
+        }
+        return;
     }
+    ether_pkt_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void upstream_rx_endpoint::run_drain()

@@ -1,5 +1,7 @@
 #include "radio_backend_esp.h"
 
+#include "upstream_rx_endpoint.h"
+#include "upstream_tx_endpoint.h"
 #include "wifi.h"
 
 #include "esp_log.h"
@@ -23,6 +25,61 @@ uint8_t radio_backend_esp::rx_queue_size() const
     return radio_.rx().queue_size();
 }
 
+uint32_t radio_backend_esp::tx_dropped_invalid_frame() const
+{
+    return radio_.tx().dropped_invalid_frame();
+}
+
+uint32_t radio_backend_esp::tx_dropped_tx_queue() const
+{
+    return radio_.tx().dropped_tx_queue();
+}
+
+uint32_t radio_backend_esp::tx_dropped_wifi() const
+{
+    return radio_.tx().dropped_wifi();
+}
+
+uint32_t radio_backend_esp::rx_dropped_filter_mismatched() const
+{
+    return radio_.rx().dropped_filter_mismatched();
+}
+
+uint32_t radio_backend_esp::rx_dropped_rx_queue() const
+{
+    return radio_.rx().dropped_rx_queue();
+}
+
+uint32_t radio_backend_esp::rx_dropped_no_peer() const
+{
+    return upstream_rx_endpoint::instance().dropped_no_peer();
+}
+
+uint32_t radio_backend_esp::rx_dropped_send_failed() const
+{
+    return upstream_rx_endpoint::instance().dropped_send_failed();
+}
+
+uint32_t radio_backend_esp::tx_ether_pkt() const
+{
+    return upstream_tx_endpoint::instance().ether_pkt();
+}
+
+uint32_t radio_backend_esp::rx_ether_pkt() const
+{
+    return upstream_rx_endpoint::instance().ether_pkt();
+}
+
+uint32_t radio_backend_esp::tx_air_pkt() const
+{
+    return radio_.tx().air_pkt();
+}
+
+uint32_t radio_backend_esp::rx_air_pkt() const
+{
+    return radio_.rx().air_pkt();
+}
+
 radio_config radio_backend_esp::radio() const
 {
     radio_config out{};
@@ -31,6 +88,11 @@ radio_config radio_backend_esp::radio() const
         ESP_LOGW(TAG, "radio(): config lock failed");
     }
     return out;
+}
+
+radio_caps radio_backend_esp::caps() const
+{
+    return radio_caps{fcs_mode::signal};
 }
 
 bool radio_backend_esp::rx_rssi(int8_t* dbm) const

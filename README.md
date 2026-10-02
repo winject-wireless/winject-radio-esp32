@@ -22,8 +22,8 @@ Host **winject-manager** and L3 tests live in the sibling repo [**winject-l3**](
 
 ## Documentation
 
+- [docs/winject.md](docs/winject.md) — radio architecture: inject/RX paths, tasks, radio config
 - [docs/mplane.md](docs/mplane.md) — UDP control plane (port 22)
-- [docs/winject-l3-mplane-update.md](docs/winject-l3-mplane-update.md) — manager integration notes
 
 ## Build and flash
 
@@ -57,7 +57,7 @@ PHY defaults match WT32-ETH01 (LAN8720 addr `1`, MDC `23`, MDIO `18`, power `16`
 ## Security
 
 - Use an **isolated bench LAN** for development.
-- Set `CONTROL_TRUSTED_IPV4` in `src/winject-esp32/config.h` to the manager host (host-order IPv4) so only that host may use the m-plane, inject, RX peer latch, and HTTP `/update`.
+- The m-plane, d-plane, and HTTP `/update` accept any source; keep radios on an isolated LAN.
 - **OTA rollback** requires a **full serial flash** (bootloader + partition table + app) once per unit. OTA alone does not replace the bootloader; units that never get that flash cannot roll back.
 - Signed apps (`SECURE_SIGNED_APPS_NO_SECURE_BOOT`) are not enabled yet.
 

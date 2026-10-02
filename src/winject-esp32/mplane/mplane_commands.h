@@ -67,6 +67,7 @@ private:
     void cmd_rx_info(char* args, mplane_reply& reply);
     void cmd_radio_tx(char* args, mplane_reply& reply);
     void cmd_radio_tx_info(char* args, mplane_reply& reply);
+    void cmd_radio_caps_info(char* args, mplane_reply& reply);
     void cmd_rx_filter_addr3(char* args, mplane_reply& reply);
     void cmd_test_ether_rx(char* args, mplane_reply& reply);
     void cmd_test_ether_tx(char* args, mplane_reply& reply);

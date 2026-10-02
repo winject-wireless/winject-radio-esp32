@@ -41,3 +41,18 @@ TEST(WifiFcsTest, RejectsShortInput)
     EXPECT_FALSE(wifi_fcs_matches(b, sizeof(b)));
     EXPECT_FALSE(wifi_fcs_matches(nullptr, 8));
 }
+
+TEST(WifiFcsTest, SignalTrailerFromRxState)
+{
+    uint8_t pass[4] = {};
+    write_fcs_signal(pass, 0);
+    EXPECT_EQ(pass[0], 0);
+    EXPECT_EQ(pass[3], 0);
+
+    uint8_t fail[4] = {};
+    write_fcs_signal(fail, 0x41);
+    EXPECT_EQ(fail[0], 0xFF);
+    EXPECT_EQ(fail[1], 0xFF);
+    EXPECT_EQ(fail[2], 0xFF);
+    EXPECT_EQ(fail[3], 0xFF);
+}

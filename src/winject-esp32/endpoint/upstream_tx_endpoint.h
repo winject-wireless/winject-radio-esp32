@@ -23,7 +23,10 @@ public:
     // set_sink() runs (and forever in OTA mode).
     void attach_eth_input(esp_eth_handle_t eth, esp_netif_t* netif);
     void set_sink(wifi_tx& tx);
-    void set_local_ipv4(uint32_t ip_be);
+    // lwip_addr: esp_ip4_addr_t::addr (network byte order), 0 = none.
+    void set_local_ipv4(uint32_t lwip_addr);
+
+    uint32_t ether_pkt() const;
 
 private:
     upstream_tx_endpoint() = default;
@@ -35,7 +38,8 @@ private:
     std::atomic<wifi_tx*> tx_{nullptr};
     esp_netif_t* netif_ = nullptr;
     uint8_t mac_[6]{};
-    std::atomic<uint32_t> local_ip_be_{0};
+    std::atomic<uint32_t> local_ip_host_{0};
+    std::atomic<uint32_t> ether_pkt_{0};
 };
 
 #endif  // WINJECT_UPSTREAM_TX_ENDPOINT_H_

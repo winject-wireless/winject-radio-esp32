@@ -44,7 +44,6 @@ target_compile_options(winject-host PRIVATE -Wall -Wextra -Werror)
 enable_testing()
 add_executable(winject-esp32-host-tests
     config_types_test.cpp
-    control_peer_test.cpp
     fcs_test.cpp
     mplane_args_test.cpp
     mplane_commands_test.cpp

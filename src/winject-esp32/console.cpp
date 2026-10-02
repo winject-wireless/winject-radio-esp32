@@ -1,7 +1,6 @@
 #include "console.h"
 
 #include "config.h"
-#include "control_peer.h"
 #include "manager.h"
 #include "mplane_commands.h"
 
@@ -185,10 +184,6 @@ void console::on_datagram()
             return;
         }
         if (n == 0)
-        {
-            continue;
-        }
-        if (!control_peer_allowed(peer.sin_addr.s_addr))
         {
             continue;
         }

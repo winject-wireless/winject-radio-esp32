@@ -1,18 +1,26 @@
 #ifndef WINJECT_UDP_L2_MATCH_H_
 #define WINJECT_UDP_L2_MATCH_H_
 
-#include "control_peer.h"
-
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 // Match IPv4/UDP frames on Ethernet for d-plane inject. No ESP-IDF deps.
 
+// esp_ip4_addr_t::addr / in_addr::s_addr (network byte order in memory)
+// -> host-order a<<24|b<<16|c<<8|d, the form udp_l2_match_dst compares.
+static inline uint32_t udp_l2_ipv4_host_from_lwip(uint32_t lwip_addr)
+{
+    const uint8_t* b = reinterpret_cast<const uint8_t*>(&lwip_addr);
+    return (static_cast<uint32_t>(b[0]) << 24) |
+           (static_cast<uint32_t>(b[1]) << 16) |
+           (static_cast<uint32_t>(b[2]) << 8) | static_cast<uint32_t>(b[3]);
+}
+
 static inline bool udp_l2_match_dst(const uint8_t* buffer, uint32_t length,
                                     const uint8_t dst_mac[6],
-                                    uint32_t dst_ip_be, uint32_t trusted_host,
-                                    uint16_t dst_port, const uint8_t** payload_out,
+                                    uint32_t dst_ip_host, uint16_t dst_port,
+                                    const uint8_t** payload_out,
                                     uint16_t* payload_len_out)
 {
     if (buffer == nullptr || length < 42u || dst_mac == nullptr ||
@@ -53,7 +61,7 @@ static inline bool udp_l2_match_dst(const uint8_t* buffer, uint32_t length,
     {
         return false;
     }
-    if (dst_ip_be == 0u)
+    if (dst_ip_host == 0u)
     {
         return false;
     }
@@ -62,16 +70,7 @@ static inline bool udp_l2_match_dst(const uint8_t* buffer, uint32_t length,
         (static_cast<uint32_t>(ip[17]) << 16) |
         (static_cast<uint32_t>(ip[18]) << 8) |
         static_cast<uint32_t>(ip[19]);
-    if (ip_dst != dst_ip_be)
-    {
-        return false;
-    }
-    const uint32_t src_be =
-        (static_cast<uint32_t>(ip[12]) << 24) |
-        (static_cast<uint32_t>(ip[13]) << 16) |
-        (static_cast<uint32_t>(ip[14]) << 8) |
-        static_cast<uint32_t>(ip[15]);
-    if (!control_peer_allowed_for(src_be, trusted_host))
+    if (ip_dst != dst_ip_host)
     {
         return false;
     }

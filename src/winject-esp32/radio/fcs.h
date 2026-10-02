@@ -11,4 +11,7 @@ bool wifi_fcs_matches(const uint8_t* frame, size_t len);
 // Writes the FCS of mpdu[0..len) to out[0..4).
 void wifi_fcs_store(const uint8_t* mpdu, size_t len, uint8_t out[4]);
 
+// fcs=SIGNAL d-plane trailer: rx_state==0 -> zeros, else all ones.
+void write_fcs_signal(uint8_t* trailer, uint8_t rx_state);
+
 #endif  // WINJECT_RADIO_FCS_H_

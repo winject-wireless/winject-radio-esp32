@@ -184,3 +184,70 @@ bool settings_blob_unpack(const uint8_t* buf, size_t len,
     *out = snap;
     return true;
 }
+
+bool settings_blob_unpack_legacy(const uint8_t* buf, size_t len,
+                                 settings_snapshot* inout)
+{
+    if (buf == nullptr || inout == nullptr ||
+        len < k_settings_blob_legacy_prefix)
+    {
+        return false;
+    }
+    blob_reader r(buf, len);
+
+    uint8_t version = 0;
+    if (!r.u8(&version) || version < k_settings_blob_legacy_min ||
+        version > k_settings_blob_legacy_max)
+    {
+        return false;
+    }
+
+    uint8_t mode = 0;
+    uint8_t channel = 0;
+    uint8_t cca = 0;
+    uint8_t allow_crc = 0;
+    uint8_t tx_power = 0;
+    if (!r.u8(&mode) || !r.u8(&channel) || !r.u8(&cca) || !r.u8(&allow_crc) ||
+        !r.u8(&tx_power))
+    {
+        return false;
+    }
+    (void)mode;
+    (void)allow_crc;
+
+    char modulation[SETTINGS_MODULATION_MAX];
+    if (!r.raw(modulation, sizeof(modulation)))
+    {
+        return false;
+    }
+    modulation[SETTINGS_MODULATION_MAX - 1] = '\0';
+
+    uint32_t ip = 0;
+    uint8_t network_mode = 0;
+    if (!r.raw(&ip, sizeof(ip)) || !r.u8(&network_mode))
+    {
+        return false;
+    }
+    if (network_mode > 1)
+    {
+        return false;
+    }
+
+    settings_snapshot snap = *inout;
+    snap.network.type =
+        network_mode == 0 ? network_type::static_ip : network_type::dhcp;
+    if (ip != 0)
+    {
+        snap.network.ip = ip;
+    }
+    snap.network.prefix = 24;
+    snap.network.timeout_s = NETWORK_DHCP_TIMEOUT_S_DEFAULT;
+    snap.radio.channel = channel;
+    snap.radio.tx_power_dbm = static_cast<int8_t>(tx_power);
+    snap.radio.cca_enabled = cca != 0;
+    strncpy(snap.radio.modulation, modulation, sizeof(snap.radio.modulation) - 1);
+    snap.radio.modulation[sizeof(snap.radio.modulation) - 1] = '\0';
+
+    *inout = snap;
+    return true;
+}

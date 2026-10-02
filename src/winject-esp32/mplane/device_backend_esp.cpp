@@ -140,6 +140,11 @@ mplane_status device_backend_esp::apply_radio(mplane_radio_backend& radio,
     return radio.set_rx_filter_addr3(rx_filter);
 }
 
+int64_t device_backend_esp::uptime_us() const
+{
+    return esp_timer_get_time();
+}
+
 mplane_status device_backend_esp::load(uint8_t slot)
 {
     settings_snapshot snap;

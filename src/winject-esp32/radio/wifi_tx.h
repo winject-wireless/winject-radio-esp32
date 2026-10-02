@@ -41,13 +41,19 @@ public:
     // Frames submitted to the driver whose TX-done has not fired yet.
     uint8_t in_flight() const;
 
+    uint32_t dropped_invalid_frame() const;
+    uint32_t dropped_tx_queue() const;
+    uint32_t dropped_wifi() const;
+    uint32_t air_pkt() const;
+    void note_invalid_frame();
+
 private:
     explicit wifi_tx(wifi& radio);
 
     void run();
     bool inject_retry(const uint8_t* frame, size_t len);
     void wait_for_driver_slot();
-    void release_driver_slot();
+    bool release_driver_slot();
     void reset_in_flight();
     void note_inject_fail(esp_err_t err);
 
@@ -69,6 +75,10 @@ private:
     bool phy_cca_off = false;
     int8_t tx_power_dbm = WIFI_DEFAULT_TX_POWER_DBM;
     std::atomic<uint32_t> in_flight_{0};
+    std::atomic<uint32_t> dropped_invalid_frame_{0};
+    std::atomic<uint32_t> dropped_tx_queue_{0};
+    std::atomic<uint32_t> dropped_wifi_{0};
+    std::atomic<uint32_t> air_pkt_{0};
     std::atomic<int64_t> last_progress_us_{0};
     uint8_t burst_sent_ = 0;
     uint32_t fail_count_ = 0;

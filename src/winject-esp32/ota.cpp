@@ -1,12 +1,10 @@
 #include "ota.h"
 
 #include "config.h"
-#include "control_peer.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/socket.h>
 
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -15,48 +13,12 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lwip/sockets.h"
 #include "manager.h"
 
 static const char* TAG = "ota";
 static httpd_handle_t g_httpd = nullptr;
 static manager* g_netmgr = nullptr;
 static esp_timer_handle_t g_ota_validate_timer = nullptr;
-
-static bool http_update_peer_allowed(httpd_req_t* req)
-{
-    const int fd = httpd_req_to_sockfd(req);
-    if (fd < 0)
-    {
-        return false;
-    }
-    sockaddr_storage peer = {};
-    socklen_t peer_len = sizeof(peer);
-    if (getpeername(fd, reinterpret_cast<sockaddr*>(&peer), &peer_len) != 0)
-    {
-        return false;
-    }
-    uint32_t addr_be = 0;
-    if (peer.ss_family == AF_INET)
-    {
-        addr_be = reinterpret_cast<sockaddr_in*>(&peer)->sin_addr.s_addr;
-    }
-    else if (peer.ss_family == AF_INET6)
-    {
-        const auto* in6 = reinterpret_cast<sockaddr_in6*>(&peer);
-        const uint8_t* b = in6->sin6_addr.s6_addr;
-        if (b[0] == 0 && b[1] == 0 && b[2] == 0 && b[3] == 0 && b[4] == 0 &&
-            b[5] == 0 && b[6] == 0 && b[7] == 0 && b[8] == 0 && b[9] == 0 &&
-            b[10] == 0xff && b[11] == 0xff)
-        {
-            addr_be = (static_cast<uint32_t>(b[12]) << 24) |
-                      (static_cast<uint32_t>(b[13]) << 16) |
-                      (static_cast<uint32_t>(b[14]) << 8) |
-                      static_cast<uint32_t>(b[15]);
-        }
-    }
-    return control_peer_allowed(addr_be);
-}
 
 static void stop_ota_validate_timer()
 {
@@ -235,11 +197,6 @@ static const uint8_t* findBytes(const uint8_t* data, size_t len,
 
 static esp_err_t handleUpdate(httpd_req_t* req)
 {
-    if (!http_update_peer_allowed(req))
-    {
-        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "forbidden\n");
-        return ESP_FAIL;
-    }
     const esp_partition_t* update = esp_ota_get_next_update_partition(nullptr);
     if (update == nullptr)
     {

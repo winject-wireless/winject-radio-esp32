@@ -103,7 +103,17 @@ def fcs(mpdu: bytes) -> bytes:
 
 def fcs_ok(frame: bytes) -> bool:
     """frame = MPDU followed by its FCS, as forwarded by the radio d-plane."""
-    return len(frame) > FCS_LEN and fcs(frame[:-FCS_LEN]) == frame[-FCS_LEN:]
+    return trailer_ok(frame, "ACTUAL")
+
+
+def trailer_ok(frame: bytes, mode: str) -> bool:
+    """Check the 4-byte d-plane trailer (fcs=ACTUAL or fcs=SIGNAL)."""
+    if len(frame) <= FCS_LEN:
+        return False
+    name = mode.strip().upper()
+    if name == "SIGNAL":
+        return frame[-FCS_LEN:] == b"\0\0\0\0"
+    return fcs(frame[:-FCS_LEN]) == frame[-FCS_LEN:]
 
 
 def unpack_mpdu(mpdu: bytes) -> list[tuple[int, bytes]]:

@@ -104,7 +104,13 @@ public:
         return slot == 3 ? mplane_status::ok : mplane_status::not_found;
     }
 
+    int64_t uptime_us() const override
+    {
+        return uptime_us_;
+    }
+
     int restarts = 0;
+    int64_t uptime_us_ = 123456789;
     std::optional<WinjectMode> restart_mode;
     int saved_slot = -1;
     bool last_reset_id_valid_ = false;
@@ -131,6 +137,51 @@ public:
         return 1;
     }
 
+    uint32_t tx_dropped_invalid_frame() const override
+    {
+        return tx_dropped_invalid_frame_;
+    }
+    uint32_t tx_dropped_tx_queue() const override
+    {
+        return tx_dropped_tx_queue_;
+    }
+    uint32_t tx_dropped_wifi() const override
+    {
+        return tx_dropped_wifi_;
+    }
+    uint32_t rx_dropped_filter_mismatched() const override
+    {
+        return rx_dropped_filter_mismatched_;
+    }
+    uint32_t rx_dropped_rx_queue() const override
+    {
+        return rx_dropped_rx_queue_;
+    }
+    uint32_t rx_dropped_no_peer() const override
+    {
+        return rx_dropped_no_peer_;
+    }
+    uint32_t rx_dropped_send_failed() const override
+    {
+        return rx_dropped_send_failed_;
+    }
+    uint32_t tx_ether_pkt() const override
+    {
+        return tx_ether_pkt_;
+    }
+    uint32_t rx_ether_pkt() const override
+    {
+        return rx_ether_pkt_;
+    }
+    uint32_t tx_air_pkt() const override
+    {
+        return tx_air_pkt_;
+    }
+    uint32_t rx_air_pkt() const override
+    {
+        return rx_air_pkt_;
+    }
+
     radio_config radio() const override
     {
         return radio_;
@@ -144,6 +195,11 @@ public:
         }
         *dbm = -42;
         return true;
+    }
+
+    radio_caps caps() const override
+    {
+        return radio_caps{fcs_mode_};
     }
 
     mplane_status set_radio(const radio_patch& patch) override
@@ -191,6 +247,18 @@ public:
 
     bool have_rssi = false;
     int set_radio_calls = 0;
+    fcs_mode fcs_mode_ = fcs_mode::signal;
+    uint32_t tx_dropped_invalid_frame_ = 3;
+    uint32_t tx_dropped_tx_queue_ = 4;
+    uint32_t tx_dropped_wifi_ = 5;
+    uint32_t rx_dropped_filter_mismatched_ = 14;
+    uint32_t rx_dropped_rx_queue_ = 7;
+    uint32_t rx_dropped_no_peer_ = 8;
+    uint32_t rx_dropped_send_failed_ = 9;
+    uint32_t tx_ether_pkt_ = 12;
+    uint32_t rx_ether_pkt_ = 13;
+    uint32_t tx_air_pkt_ = 10;
+    uint32_t rx_air_pkt_ = 11;
 
 private:
     radio_config radio_;
@@ -285,7 +353,11 @@ TEST_F(MplaneCommandsTest, UnknownCommandAndComments)
 
 TEST_F(MplaneCommandsTest, MultipleLinesInOneDatagram)
 {
-    EXPECT_EQ(run("ping\nti\n"), "pong\ntx_info tx_queue_sz=3 in_flight=2\n");
+    EXPECT_EQ(
+        run("ping\nti\n"),
+        "pong\ntx_info tx_queue_sz=3 in_flight=2 dropped_invalid_frame=3 "
+        "dropped_tx_queue=4 dropped_wifi=5 ether_pkt=12 air_pkt=10 "
+        "ts=123456789\n");
 }
 
 TEST_F(MplaneCommandsTest, HelpListsCommandsAndModulations)
@@ -373,9 +445,32 @@ TEST_F(MplaneCommandsTest, TuneCommandsRejectInvalid)
 
 TEST_F(MplaneCommandsTest, QueueInfo)
 {
-    EXPECT_EQ(run("tx_info"), "tx_info tx_queue_sz=3 in_flight=2\n");
-    EXPECT_EQ(run("ri"), "rx_info rx_queue_sz=1\n");
+    EXPECT_EQ(
+        run("tx_info"),
+        "tx_info tx_queue_sz=3 in_flight=2 dropped_invalid_frame=3 "
+        "dropped_tx_queue=4 dropped_wifi=5 ether_pkt=12 air_pkt=10 "
+        "ts=123456789\n");
+    EXPECT_EQ(
+        run("ri"),
+        "rx_info rx_queue_sz=1 dropped_filter_mismatched=14 "
+        "dropped_rx_queue=7 dropped_no_peer=8 dropped_send_failed=9 "
+        "ether_pkt=13 air_pkt=11 ts=123456789\n");
     EXPECT_EQ(run("ri now=1"), "NOK EINVAL\n");
+}
+
+TEST_F(MplaneCommandsTest, QueueInfoLargeCountersAndUptime)
+{
+    radio.tx_dropped_invalid_frame_ = 4294967295u;
+    radio.tx_dropped_tx_queue_ = 4294967295u;
+    radio.tx_dropped_wifi_ = 4294967295u;
+    radio.tx_ether_pkt_ = 4294967295u;
+    radio.tx_air_pkt_ = 4294967295u;
+    device.uptime_us_ = 5000000000LL;
+    EXPECT_EQ(
+        run("tx_info"),
+        "tx_info tx_queue_sz=3 in_flight=2 dropped_invalid_frame=4294967295 "
+        "dropped_tx_queue=4294967295 dropped_wifi=4294967295 "
+        "ether_pkt=4294967295 air_pkt=4294967295 ts=5000000000\n");
 }
 
 TEST_F(MplaneCommandsTest, RadioTxPartialUpdate)
@@ -407,6 +502,21 @@ TEST_F(MplaneCommandsTest, RadioTxInfoWithOptionalRssi)
     EXPECT_EQ(run("radio_tx_info"),
               "radio_tx channel=1 tx_power=20 modulation=DSS_1M_L cca=true\n"
               "radio_rx rssi=-42\n");
+}
+
+TEST_F(MplaneCommandsTest, RadioCapsInfo)
+{
+    EXPECT_EQ(run("radio_caps_info"), "OK radio_caps_info fcs=SIGNAL\n");
+    EXPECT_EQ(run("rci"), "OK radio_caps_info fcs=SIGNAL\n");
+    EXPECT_EQ(run("radio_caps_info x=1"), "NOK EINVAL\n");
+    radio.fcs_mode_ = fcs_mode::actual;
+    EXPECT_EQ(run("radio_caps_info"), "OK radio_caps_info fcs=ACTUAL\n");
+    EXPECT_EQ(run("cmd:9 radio_caps_info"), "OK:9 radio_caps_info fcs=ACTUAL\n");
+    mplane_commands ota(device, nullptr, nullptr);
+    string_reply reply;
+    std::string line = "radio_caps_info";
+    ota.handle_line(line.data(), reply);
+    EXPECT_EQ(reply.text, "NOK ENODEV\n");
 }
 
 TEST_F(MplaneCommandsTest, RxFilterAddr3SetQueryClear)

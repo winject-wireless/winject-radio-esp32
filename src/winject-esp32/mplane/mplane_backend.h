@@ -45,6 +45,17 @@ struct rx_test_stats
     uint64_t fec_error_pkt = 0;
 };
 
+enum class fcs_mode : uint8_t
+{
+    signal,
+    actual,
+};
+
+struct radio_caps
+{
+    fcs_mode fcs = fcs_mode::actual;
+};
+
 // count == 0 stops the run identified by id. rate_kbps == 0 = unpaced.
 struct ether_tx_request
 {
@@ -103,6 +114,8 @@ public:
 
     virtual mplane_status save(uint8_t slot) = 0;
     virtual mplane_status load(uint8_t slot) = 0;
+
+    virtual int64_t uptime_us() const = 0;
 };
 
 class mplane_radio_backend
@@ -115,7 +128,20 @@ public:
     virtual uint8_t tx_in_flight() const = 0;
     virtual uint8_t rx_queue_size() const = 0;
 
+    virtual uint32_t tx_dropped_invalid_frame() const = 0;
+    virtual uint32_t tx_dropped_tx_queue() const = 0;
+    virtual uint32_t tx_dropped_wifi() const = 0;
+    virtual uint32_t rx_dropped_filter_mismatched() const = 0;
+    virtual uint32_t rx_dropped_rx_queue() const = 0;
+    virtual uint32_t rx_dropped_no_peer() const = 0;
+    virtual uint32_t rx_dropped_send_failed() const = 0;
+    virtual uint32_t tx_ether_pkt() const = 0;
+    virtual uint32_t rx_ether_pkt() const = 0;
+    virtual uint32_t tx_air_pkt() const = 0;
+    virtual uint32_t rx_air_pkt() const = 0;
+
     virtual radio_config radio() const = 0;
+    virtual radio_caps caps() const = 0;
     // false until a frame has been received.
     virtual bool rx_rssi(int8_t* dbm) const = 0;
     virtual mplane_status set_radio(const radio_patch& patch) = 0;

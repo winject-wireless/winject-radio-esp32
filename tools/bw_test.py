@@ -290,6 +290,25 @@ def replies_ok(replies: list[str]) -> bool:
     return all(reply_ok(text) for text in replies)
 
 
+def query_fcs_mode(ip: str, quiet: bool = True) -> str:
+    """Return SIGNAL or ACTUAL for d-plane trailer checks (NOK ENOSYS -> ACTUAL)."""
+    try:
+        replies = console(ip, ["radio_caps_info"], quiet=quiet)
+    except OSError as err:
+        print(f"warning: radio_caps_info {ip} failed: {err}")
+        return "ACTUAL"
+    text = "".join(replies)
+    if not reply_ok(text):
+        return "ACTUAL"
+    for line in text.splitlines():
+        if "fcs=" not in line:
+            continue
+        token = line.split("fcs=", 1)[1].strip().split()[0].upper()
+        if token in ("SIGNAL", "ACTUAL"):
+            return token
+    return "ACTUAL"
+
+
 def fmt_bus(bus: str) -> str:
     text = bus.strip().lower()
     if text.startswith("bus="):
@@ -442,8 +461,8 @@ def recv_delivered(stats: RecvStats) -> int:
 
 class Listener:
     """UDP receiver. With radio=<ip> (direct path) it registers as the radio's
-    d-plane forward peer and receives MPDU + FCS datagrams; bad-FCS frames
-    are counted and dropped, the rest are filtered by bus."""
+    d-plane forward peer and receives MPDU + trailer datagrams; failed
+    integrity checks are counted and dropped, the rest are filtered by bus."""
 
     def __init__(
         self,
@@ -451,10 +470,12 @@ class Listener:
         port: int,
         bus_filter: int | None = None,
         radio: str | None = None,
+        fcs_mode: str = "ACTUAL",
     ) -> None:
         self.stats = RecvStats()
         self.bus_filter = bus_filter
         self._radio = radio
+        self._fcs_mode = fcs_mode.strip().upper()
         self._stop = threading.Event()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -494,10 +515,10 @@ class Listener:
             except OSError:
                 break
             if self._radio is not None:
-                if not mpdu.fcs_ok(data):
+                if not mpdu.trailer_ok(data, self._fcs_mode):
                     self.stats.fcs_errors += 1
                     continue
-                data = data[:-FCS_LEN]
+                data = data[:-mpdu.FCS_LEN]
             if self.bus_filter is None:
                 self._note(data)
                 continue
@@ -1124,8 +1145,15 @@ def main() -> int:
             for label, ip in (("A", args.a), ("B", args.b)):
                 if not configure_rx_filter(ip, domain, quiet):
                     raise SystemExit(f"failed to set rx_filter_addr3 on {label}")
-        listen_a = Listener(host, HOST_PORT_A, bus_filter=bus_ba_i, radio=args.a)
-        listen_b = Listener(host, HOST_PORT_B, bus_filter=bus_ab_i, radio=args.b)
+        fcs_a = query_fcs_mode(args.a, quiet=quiet)
+        fcs_b = query_fcs_mode(args.b, quiet=quiet)
+        print(f"d-plane fcs mode: A={fcs_a}  B={fcs_b}")
+        listen_a = Listener(
+            host, HOST_PORT_A, bus_filter=bus_ba_i, radio=args.a, fcs_mode=fcs_a
+        )
+        listen_b = Listener(
+            host, HOST_PORT_B, bus_filter=bus_ab_i, radio=args.b, fcs_mode=fcs_b
+        )
         dest_a = (args.a, INJECT_PORT)
         dest_b = (args.b, INJECT_PORT)
 

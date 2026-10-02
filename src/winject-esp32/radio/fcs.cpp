@@ -1,5 +1,7 @@
 #include "fcs.h"
 
+#include <string.h>
+
 #ifndef WINJECT_HOST_TEST
 #include "esp_rom_crc.h"
 #endif
@@ -52,4 +54,14 @@ void wifi_fcs_store(const uint8_t* mpdu, size_t len, uint8_t out[4])
     out[1] = static_cast<uint8_t>(crc >> 8);
     out[2] = static_cast<uint8_t>(crc >> 16);
     out[3] = static_cast<uint8_t>(crc >> 24);
+}
+
+void write_fcs_signal(uint8_t* trailer, uint8_t rx_state)
+{
+    if (trailer == nullptr)
+    {
+        return;
+    }
+    const uint32_t verdict = (rx_state == 0) ? 0u : 0xFFFFFFFFu;
+    memcpy(trailer, &verdict, 4);
 }

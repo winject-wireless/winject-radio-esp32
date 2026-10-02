@@ -303,7 +303,9 @@ settings::read_result settings::read_slot(uint8_t slot, settings_snapshot* out)
     {
         return read_result::missing;
     }
-    uint8_t blob[k_settings_blob_size + 1];
+    // Large enough for legacy winject-esp32 blobs; only boot/console call read_slot
+    // and never concurrently.
+    static uint8_t blob[k_settings_blob_legacy_max_size];
     size_t len = sizeof(blob);
     const esp_err_t err = nvs_get_blob(nvs.get(), key, blob, &len);
     if (err == ESP_ERR_NVS_NOT_FOUND)
@@ -312,8 +314,8 @@ settings::read_result settings::read_slot(uint8_t slot, settings_snapshot* out)
     }
     if (err == ESP_ERR_NVS_INVALID_LENGTH)
     {
-        ESP_LOGW(TAG, "slot %u: blob larger than v%u layout", slot,
-                 k_settings_blob_version);
+        ESP_LOGW(TAG, "slot %u: blob larger than legacy max (%u bytes)", slot,
+                 static_cast<unsigned>(sizeof(blob)));
         return read_result::invalid;
     }
     if (err != ESP_OK)
@@ -321,16 +323,46 @@ settings::read_result settings::read_slot(uint8_t slot, settings_snapshot* out)
         ESP_LOGE(TAG, "slot %u read failed: %s", slot, esp_err_to_name(err));
         return read_result::io_error;
     }
-    settings_snapshot snap;
-    if (!settings_blob_unpack(blob, len, &snap) || !snapshot_valid(snap))
+    if (len > 0 && blob[0] == k_settings_blob_version)
     {
-        ESP_LOGW(TAG, "slot %u: invalid or pre-v%u blob (%u bytes, v%u)", slot,
-                 k_settings_blob_version, static_cast<unsigned>(len),
-                 len > 0 ? blob[0] : 0u);
-        return read_result::invalid;
+        settings_snapshot snap;
+        if (!settings_blob_unpack(blob, len, &snap) || !snapshot_valid(snap))
+        {
+            ESP_LOGW(TAG, "slot %u: invalid v%u blob (%u bytes)", slot,
+                     k_settings_blob_version, static_cast<unsigned>(len));
+            return read_result::invalid;
+        }
+        *out = snap;
+        return read_result::ok;
     }
-    *out = snap;
-    return read_result::ok;
+    if (len > 0 && blob[0] >= k_settings_blob_legacy_min &&
+        blob[0] <= k_settings_blob_legacy_max)
+    {
+        settings_snapshot snap = defaults();
+        if (!settings_blob_unpack_legacy(blob, len, &snap))
+        {
+            ESP_LOGW(TAG, "slot %u: corrupt legacy v%u blob (%u bytes)", slot,
+                     blob[0], static_cast<unsigned>(len));
+            return read_result::invalid;
+        }
+        if (!snapshot_valid(snap))
+        {
+            snap.radio = defaults().radio;
+            if (!snapshot_valid(snap))
+            {
+                ESP_LOGW(TAG, "slot %u: invalid legacy v%u blob (%u bytes)",
+                         slot, blob[0], static_cast<unsigned>(len));
+                return read_result::invalid;
+            }
+        }
+        ESP_LOGI(TAG, "slot %u: migrated legacy v%u blob", slot, blob[0]);
+        *out = snap;
+        return read_result::ok;
+    }
+    ESP_LOGW(TAG, "slot %u: invalid or pre-v%u blob (%u bytes, v%u)", slot,
+             k_settings_blob_version, static_cast<unsigned>(len),
+             len > 0 ? blob[0] : 0u);
+    return read_result::invalid;
 }
 
 bool settings::set_current_slot(uint8_t slot)

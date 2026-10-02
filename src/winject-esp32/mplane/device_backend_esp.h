@@ -34,6 +34,8 @@ public:
     mplane_status save(uint8_t slot) override;
     mplane_status load(uint8_t slot) override;
 
+    int64_t uptime_us() const override;
+
     // Applies a stored radio config + rx filter (boot and `load`).
     static mplane_status apply_radio(mplane_radio_backend& radio,
                                      const radio_config& cfg,

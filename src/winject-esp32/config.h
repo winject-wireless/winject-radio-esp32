@@ -42,6 +42,9 @@
 // to this port.
 #define DPLANE_INJECT_PORT 9000
 #define DPLANE_RX_PORT 9210
+// Largest MPDU in one unfragmented inject datagram (1500 MTU − 20 IP − 8 UDP).
+// Larger payloads are IP-fragmented and rejected by the inject hijack.
+#define DPLANE_INJECT_MPDU_MAX 1472
 
 // test_ether_tx/rx UDP payload: IPv4/UDP L2 = 14+20+8+payload must fit
 // CONFIG_ETH_DMA_BUFFER_SIZE (1514).
@@ -80,10 +83,6 @@
 #define OTA_HTTP_PORT 80
 // Pending OTA image is marked valid after this many seconds of link + IPv4.
 #define OTA_VALIDATE_UPTIME_S 30
-
-// Host-order IPv4 (e.g. 0xC0A8FD01u = 192.168.253.1). 0 = accept any source
-// (isolated bench LAN only). Non-zero: m-plane, d-plane, and HTTP OTA.
-#define CONTROL_TRUSTED_IPV4 0u
 
 // Core split: WiFi driver + inject task on core 0; Ethernet/lwIP/console/OTA
 // on core 1 (see sdkconfig.defaults).

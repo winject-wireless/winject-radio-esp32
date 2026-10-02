@@ -18,9 +18,15 @@ upstream_tx_endpoint& upstream_tx_endpoint::instance()
     return inst;
 }
 
-void upstream_tx_endpoint::set_local_ipv4(uint32_t ip_be)
+void upstream_tx_endpoint::set_local_ipv4(uint32_t lwip_addr)
 {
-    local_ip_be_.store(ip_be, std::memory_order_relaxed);
+    local_ip_host_.store(udp_l2_ipv4_host_from_lwip(lwip_addr),
+                         std::memory_order_relaxed);
+}
+
+uint32_t upstream_tx_endpoint::ether_pkt() const
+{
+    return ether_pkt_.load(std::memory_order_relaxed);
 }
 
 bool upstream_tx_endpoint::try_hijack_udp(uint8_t* buffer, uint32_t length)
@@ -28,17 +34,20 @@ bool upstream_tx_endpoint::try_hijack_udp(uint8_t* buffer, uint32_t length)
     wifi_tx* tx = tx_.load(std::memory_order_acquire);
     const uint8_t* payload = nullptr;
     uint16_t payload_len = 0;
-    const uint32_t ip_be = local_ip_be_.load(std::memory_order_relaxed);
+    const uint32_t dst_ip_host =
+        local_ip_host_.load(std::memory_order_relaxed);
     if (tx == nullptr ||
-        !udp_l2_match_dst(buffer, length, mac_, ip_be, CONTROL_TRUSTED_IPV4,
+        !udp_l2_match_dst(buffer, length, mac_, dst_ip_host,
                           DPLANE_INJECT_PORT, &payload, &payload_len))
     {
         return false;
     }
+    ether_pkt_.fetch_add(1, std::memory_order_relaxed);
     // Matched frames are consumed: from here the packet owns buffer, so a
     // dropped frame must not also be handed to lwIP.
     if (payload_len < WIFI_RADIO_INJECT_MIN || payload_len > WIFI_RADIO_INJECT_MAX)
     {
+        tx->note_invalid_frame();
         free(buffer);
         return true;
     }

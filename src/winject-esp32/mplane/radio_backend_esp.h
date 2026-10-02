@@ -15,7 +15,20 @@ public:
     uint8_t tx_in_flight() const override;
     uint8_t rx_queue_size() const override;
 
+    uint32_t tx_dropped_invalid_frame() const override;
+    uint32_t tx_dropped_tx_queue() const override;
+    uint32_t tx_dropped_wifi() const override;
+    uint32_t rx_dropped_filter_mismatched() const override;
+    uint32_t rx_dropped_rx_queue() const override;
+    uint32_t rx_dropped_no_peer() const override;
+    uint32_t rx_dropped_send_failed() const override;
+    uint32_t tx_ether_pkt() const override;
+    uint32_t rx_ether_pkt() const override;
+    uint32_t tx_air_pkt() const override;
+    uint32_t rx_air_pkt() const override;
+
     radio_config radio() const override;
+    radio_caps caps() const override;
     bool rx_rssi(int8_t* dbm) const override;
     // Rejects unknown modulations and OFDM on channel 14 as invalid; applies
     // channel and modulation in the order that keeps each step legal.

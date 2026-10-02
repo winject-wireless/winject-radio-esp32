@@ -110,6 +110,8 @@ const mplane_commands::command mplane_commands::k_commands[] = {
      &mplane_commands::cmd_radio_tx},
     {"radio_tx_info", "rti", "", needs::radio,
      &mplane_commands::cmd_radio_tx_info},
+    {"radio_caps_info", "rci", "", needs::radio,
+     &mplane_commands::cmd_radio_caps_info},
     {"rx_filter_addr3", "rf3", "addr=<mac|empty>", needs::radio,
      &mplane_commands::cmd_rx_filter_addr3},
     {"test_ether_rx", "ter", "port=<port|0>", needs::test,
@@ -486,9 +488,18 @@ void mplane_commands::cmd_tx_info(char* args, mplane_reply& reply)
         reply.nok(mplane_status::invalid);
         return;
     }
-    reply.print("tx_info tx_queue_sz=%u in_flight=%u\n",
-                static_cast<unsigned>(radio_->tx_queue_size()),
-                static_cast<unsigned>(radio_->tx_in_flight()));
+    reply.print(
+        "tx_info tx_queue_sz=%u in_flight=%u dropped_invalid_frame=%lu "
+        "dropped_tx_queue=%lu dropped_wifi=%lu ether_pkt=%lu air_pkt=%lu "
+        "ts=%llu\n",
+        static_cast<unsigned>(radio_->tx_queue_size()),
+        static_cast<unsigned>(radio_->tx_in_flight()),
+        static_cast<unsigned long>(radio_->tx_dropped_invalid_frame()),
+        static_cast<unsigned long>(radio_->tx_dropped_tx_queue()),
+        static_cast<unsigned long>(radio_->tx_dropped_wifi()),
+        static_cast<unsigned long>(radio_->tx_ether_pkt()),
+        static_cast<unsigned long>(radio_->tx_air_pkt()),
+        static_cast<unsigned long long>(device_.uptime_us()));
 }
 
 void mplane_commands::cmd_rx_info(char* args, mplane_reply& reply)
@@ -498,8 +509,18 @@ void mplane_commands::cmd_rx_info(char* args, mplane_reply& reply)
         reply.nok(mplane_status::invalid);
         return;
     }
-    reply.print("rx_info rx_queue_sz=%u\n",
-                static_cast<unsigned>(radio_->rx_queue_size()));
+    reply.print(
+        "rx_info rx_queue_sz=%u dropped_filter_mismatched=%lu "
+        "dropped_rx_queue=%lu dropped_no_peer=%lu dropped_send_failed=%lu "
+        "ether_pkt=%lu air_pkt=%lu ts=%llu\n",
+        static_cast<unsigned>(radio_->rx_queue_size()),
+        static_cast<unsigned long>(radio_->rx_dropped_filter_mismatched()),
+        static_cast<unsigned long>(radio_->rx_dropped_rx_queue()),
+        static_cast<unsigned long>(radio_->rx_dropped_no_peer()),
+        static_cast<unsigned long>(radio_->rx_dropped_send_failed()),
+        static_cast<unsigned long>(radio_->rx_ether_pkt()),
+        static_cast<unsigned long>(radio_->rx_air_pkt()),
+        static_cast<unsigned long long>(device_.uptime_us()));
 }
 
 void mplane_commands::print_radio(const char* prefix, const radio_config& cfg,
@@ -579,6 +600,32 @@ void mplane_commands::cmd_radio_tx_info(char* args, mplane_reply& reply)
     {
         reply.print("radio_rx rssi=%d\n", static_cast<int>(rssi));
     }
+}
+
+namespace
+{
+const char* fcs_mode_name(fcs_mode mode)
+{
+    switch (mode)
+    {
+    case fcs_mode::signal:
+        return "SIGNAL";
+    case fcs_mode::actual:
+        return "ACTUAL";
+    }
+    return "ACTUAL";
+}
+}  // namespace
+
+void mplane_commands::cmd_radio_caps_info(char* args, mplane_reply& reply)
+{
+    if (!args_empty(args))
+    {
+        reply.nok(mplane_status::invalid);
+        return;
+    }
+    reply.print("OK radio_caps_info fcs=%s\n",
+                fcs_mode_name(radio_->caps().fcs));
 }
 
 void mplane_commands::cmd_rx_filter_addr3(char* args, mplane_reply& reply)

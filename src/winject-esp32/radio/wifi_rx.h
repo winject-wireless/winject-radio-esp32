@@ -15,8 +15,8 @@
 
 class wifi;
 
-// Promiscuous RX. The WiFi callback filters on Addr3, copies MPDU + on-air FCS
-// into an RX pool slot, and queues it for the d-plane drain task.
+// Promiscuous RX. The WiFi callback filters on Addr3, copies the MPDU plus a
+// 4-byte fcs=SIGNAL trailer into an RX pool slot, and queues it for d-plane.
 class wifi_rx
 {
     friend class wifi;
@@ -38,8 +38,10 @@ public:
     bool init(uint8_t capacity);
 
     uint8_t queue_size() const;
-    // Next forwarded frame (MPDU followed by its 4-byte FCS); invalid on
-    // timeout.
+    uint32_t dropped_filter_mismatched() const;
+    uint32_t dropped_rx_queue() const;
+    uint32_t air_pkt() const;
+    // Next forwarded frame (MPDU + 4-byte fcs=SIGNAL trailer); invalid on timeout.
     packet pop(TickType_t wait);
     void on_upstream_deliver();
 
@@ -65,7 +67,7 @@ private:
     void on_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type);
     bool forward_accept(const uint8_t* mpdu, size_t len) const;
     bool test_accept(const uint8_t* mpdu) const;
-    void count_test(const uint8_t* frame, size_t mpdu_len);
+    void count_test(size_t mpdu_len, uint8_t rx_state);
 
     wifi& radio;
     bfc::wait_free_queue<std::optional<packet>, k_queue_max> q;
@@ -77,6 +79,9 @@ private:
     std::atomic<uint64_t> test_fcs_err_{0};
     std::atomic<int8_t> rssi_{0};
     std::atomic<bool> rssi_valid_{false};
+    std::atomic<uint32_t> dropped_filter_mismatched_{0};
+    std::atomic<uint32_t> dropped_rx_queue_{0};
+    std::atomic<uint32_t> air_pkt_{0};
 };
 
 #endif  // WINJECT_WIFI_RX_H_
