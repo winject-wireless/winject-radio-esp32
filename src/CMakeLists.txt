@@ -9,6 +9,7 @@ set(winject_srcs
     "winject-esp32/mplane/mplane_commands.cpp"
     "winject-esp32/mplane/mplane_reply.cpp"
     "winject-esp32/mplane/mplane_req_id.cpp"
+    "winject-esp32/mplane/mplane_version.cpp"
     "winject-esp32/mplane/radio_backend_esp.cpp"
     "winject-esp32/mplane/test_backend_esp.cpp"
     "winject-esp32/netmgr/dhcp_client.cpp"

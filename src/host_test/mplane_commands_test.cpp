@@ -98,6 +98,11 @@ public:
         return uptime_us_;
     }
 
+    const char* version() const override
+    {
+        return WINJECT_VERSION_STRING;
+    }
+
     int restarts = 0;
     int64_t uptime_us_ = 123456789;
     std::optional<WinjectMode> restart_mode;
@@ -329,6 +334,15 @@ TEST_F(MplaneCommandsTest, PingAndAlias)
     EXPECT_EQ(run("ping"), "pong\n");
     EXPECT_EQ(run("P\r\n"), "pong\n");
     EXPECT_EQ(run("ping extra"), "NOK EINVAL\n");
+}
+
+// frozen: changing this breaks version discovery for every older and newer peer.
+TEST_F(MplaneCommandsTest, VersionCommand)
+{
+    EXPECT_EQ(run("version"), "OK version ver=v1.0.0 proto=1.0\n");
+    EXPECT_EQ(run("ver"), "OK version ver=v1.0.0 proto=1.0\n");
+    EXPECT_EQ(run("version x=1"), "NOK EINVAL\n");
+    EXPECT_EQ(run("cmd:7 version"), "OK:7 version ver=v1.0.0 proto=1.0\n");
 }
 
 TEST_F(MplaneCommandsTest, UnknownCommandAndComments)

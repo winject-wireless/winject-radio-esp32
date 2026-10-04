@@ -10,7 +10,7 @@ test_backend_esp::test_backend_esp(wifi& radio) : radio_(radio), wifi_tx_(radio)
 mplane_status test_backend_esp::set_ether_rx_port(uint16_t port)
 {
     if (port == CONTROL_CONSOLE_PORT || port == OTA_HTTP_PORT ||
-        port == DPLANE_INJECT_PORT || port == DPLANE_RX_PORT)
+        port == DPLANE_PORT)
     {
         return mplane_status::invalid;
     }

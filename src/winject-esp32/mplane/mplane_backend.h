@@ -113,6 +113,9 @@ public:
     virtual mplane_status load(uint8_t slot) = 0;
 
     virtual int64_t uptime_us() const = 0;
+
+    // Full component version, e.g. "v1.0.0".
+    virtual const char* version() const = 0;
 };
 
 class mplane_radio_backend

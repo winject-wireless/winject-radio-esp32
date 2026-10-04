@@ -56,6 +56,7 @@ private:
 
     void cmd_help(char* args, mplane_reply& reply);
     void cmd_ping(char* args, mplane_reply& reply);
+    void cmd_version(char* args, mplane_reply& reply);
     void cmd_reset(char* args, mplane_reply& reply);
     void cmd_save(char* args, mplane_reply& reply);
     void cmd_load(char* args, mplane_reply& reply);

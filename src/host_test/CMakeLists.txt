@@ -19,6 +19,7 @@ FetchContent_Declare(googletest
 FetchContent_MakeAvailable(googletest)
 
 set(FW_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../winject-esp32)
+set(WINJECT_PROJECT_VER "1.0.0")
 
 add_library(winject-host STATIC
     ${FW_DIR}/config_types.cpp
@@ -29,6 +30,7 @@ add_library(winject-host STATIC
     ${FW_DIR}/mplane/mplane_commands.cpp
     ${FW_DIR}/mplane/mplane_reply.cpp
     ${FW_DIR}/mplane/mplane_req_id.cpp
+    ${FW_DIR}/mplane/mplane_version.cpp
 )
 target_include_directories(winject-host PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -38,15 +40,18 @@ target_include_directories(winject-host PUBLIC
     ${FW_DIR}/radio
     ${FW_DIR}/mplane
 )
-target_compile_definitions(winject-host PUBLIC WINJECT_HOST_TEST)
+target_compile_definitions(winject-host PUBLIC WINJECT_HOST_TEST
+    WINJECT_VERSION_STRING="v${WINJECT_PROJECT_VER}")
 target_compile_options(winject-host PRIVATE -Wall -Wextra -Werror)
 
 enable_testing()
 add_executable(winject-esp32-host-tests
     config_types_test.cpp
+    dplane_classify_test.cpp
     fcs_test.cpp
     mplane_args_test.cpp
     mplane_commands_test.cpp
+    mplane_version_test.cpp
     settings_blob_test.cpp
     test_run_test.cpp
     udp_l2_match_test.cpp

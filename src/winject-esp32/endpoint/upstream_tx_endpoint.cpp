@@ -1,6 +1,7 @@
 #include "upstream_tx_endpoint.h"
 
 #include "config.h"
+#include "dplane_classify.h"
 #include "packet.h"
 #include "udp_l2_match.h"
 #include "wifi_tx.h"
@@ -37,20 +38,31 @@ bool upstream_tx_endpoint::try_hijack_udp(uint8_t* buffer, uint32_t length)
     const uint32_t dst_ip_host =
         local_ip_host_.load(std::memory_order_relaxed);
     if (tx == nullptr ||
-        !udp_l2_match_dst(buffer, length, mac_, dst_ip_host,
-                          DPLANE_INJECT_PORT, &payload, &payload_len))
+        !udp_l2_match_dst(buffer, length, mac_, dst_ip_host, DPLANE_PORT,
+                          &payload, &payload_len))
     {
         return false;
     }
-    ether_pkt_.fetch_add(1, std::memory_order_relaxed);
-    // Matched frames are consumed: from here the packet owns buffer, so a
-    // dropped frame must not also be handed to lwIP.
-    if (payload_len < WIFI_RADIO_INJECT_MIN || payload_len > WIFI_RADIO_INJECT_MAX)
+    switch (dplane_classify(payload_len))
     {
+        case dplane_kind::registration:
+            return false;
+        case dplane_kind::invalid:
+            ether_pkt_.fetch_add(1, std::memory_order_relaxed);
+            tx->note_invalid_frame();
+            free(buffer);
+            return true;
+        case dplane_kind::mpdu:
+            break;
+    }
+    if (payload_len > WIFI_RADIO_INJECT_MAX)
+    {
+        ether_pkt_.fetch_add(1, std::memory_order_relaxed);
         tx->note_invalid_frame();
         free(buffer);
         return true;
     }
+    ether_pkt_.fetch_add(1, std::memory_order_relaxed);
     tx->enqueue(packet::adopt_heap(buffer, payload, payload_len));
     return true;
 }
@@ -103,5 +115,5 @@ void upstream_tx_endpoint::attach_eth_input(esp_eth_handle_t eth,
 void upstream_tx_endpoint::set_sink(wifi_tx& tx)
 {
     tx_.store(&tx, std::memory_order_release);
-    ESP_LOGI(TAG, "d-plane inject UDP %u -> wifi_tx", DPLANE_INJECT_PORT);
+    ESP_LOGI(TAG, "d-plane inject UDP %u -> wifi_tx", DPLANE_PORT);
 }

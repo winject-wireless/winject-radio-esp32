@@ -3,7 +3,7 @@
 
 Always applied: stop any test_wifi_tx run, rx_filter_addr3 for --domain.
 Optional (only if flagged): --channel, --modulation, --power, --cca/--no-cca.
-D-plane ports are fixed on the radio (inject 9000, forward 9210); the manager
+D-plane port is fixed on the radio (UDP 9000 for inject, registration, and forward); the manager
 registers itself as the forward peer.
 """
 
@@ -102,7 +102,7 @@ def main() -> int:
         cca = "enabled" if args.cca else "disabled"
     print(
         f"ok domain={domain or 'any'} channel={ch} modulation={mod} power={pwr} "
-        f"cca={cca} inject={bw.INJECT_PORT} forward={bw.DPLANE_RX_PORT}"
+        f"cca={cca} dplane={bw.DPLANE_PORT}"
     )
     return 0
 

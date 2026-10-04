@@ -14,7 +14,7 @@
 class wifi_rx;
 
 // D-plane RX: drains wifi_rx and sends each frame (MPDU + FCS) as one UDP
-// datagram from DPLANE_RX_PORT to the peer that last sent any datagram there.
+// datagram from DPLANE_PORT to the peer registered by a 1–23 byte datagram there.
 class upstream_rx_endpoint
 {
 public:
@@ -22,7 +22,7 @@ public:
     upstream_rx_endpoint(const upstream_rx_endpoint&) = delete;
     upstream_rx_endpoint& operator=(const upstream_rx_endpoint&) = delete;
 
-    // Binds DPLANE_RX_PORT and starts the drain task (once).
+    // Binds DPLANE_PORT and starts the drain task (once).
     bool start(wifi_rx& rx, BaseType_t core = APP_TASK_CORE,
                UBaseType_t prio = UPSTREAM_RX_TASK_PRIO,
                uint32_t stack_bytes = UPSTREAM_RX_TASK_STACK);

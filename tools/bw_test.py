@@ -29,9 +29,9 @@ sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
 CONSOLE_PORT = 22
-INJECT_PORT = 9000
-# Radio d-plane forward port; a datagram sent here registers the sender as peer.
-DPLANE_RX_PORT = 9210
+# Radio d-plane port: MPDU inject and forward-peer registration (1–23 bytes).
+DPLANE_PORT = 9000
+INJECT_PORT = DPLANE_PORT
 FCS_LEN = 4  # radio forwards MPDU + 802.11 FCS (CRC-32, little-endian)
 PEER_REGISTER_INTERVAL_S = 1.0
 HOST_PORT_A = 9001  # B→A: radio A forward / manager A demux listen
@@ -498,7 +498,7 @@ class Listener:
     def _register(self) -> None:
         # Repeated so a radio reboot does not silently stop forwarding.
         try:
-            self._sock.sendto(b"peer", (self._radio, DPLANE_RX_PORT))
+            self._sock.sendto(b"peer", (self._radio, DPLANE_PORT))
         except OSError as err:
             print(f"warning: d-plane register with {self._radio} failed: {err}")
 
@@ -1137,7 +1137,7 @@ def main() -> int:
         dest_b = ("127.0.0.1", args.tcp_send_b)
     else:
         print(
-            f"direct MPDU inject {INJECT_PORT}; forward {DPLANE_RX_PORT} -> host "
+            f"direct MPDU inject/forward UDP {DPLANE_PORT} -> host "
             f"{HOST_PORT_A}/{HOST_PORT_B} (addr3 domain {domain})"
         )
         if not skip_upstream:

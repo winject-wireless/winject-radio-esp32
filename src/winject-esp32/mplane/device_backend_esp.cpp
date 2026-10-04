@@ -3,8 +3,12 @@
 #include "manager.h"
 #include "settings.h"
 
+#include "esp_app_desc.h"
+#include "esp_app_format.h"
 #include "esp_log.h"
 #include "esp_system.h"
+
+#include <stdio.h>
 
 static const char* TAG = "device_mplane";
 
@@ -130,6 +134,14 @@ mplane_status device_backend_esp::apply_radio(mplane_radio_backend& radio,
 int64_t device_backend_esp::uptime_us() const
 {
     return esp_timer_get_time();
+}
+
+const char* device_backend_esp::version() const
+{
+    static char buf[48];
+    const esp_app_desc_t* app = esp_app_get_description();
+    snprintf(buf, sizeof(buf), "v%s", app->version);
+    return buf;
 }
 
 mplane_status device_backend_esp::load(uint8_t slot)

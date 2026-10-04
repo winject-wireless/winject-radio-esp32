@@ -1,5 +1,6 @@
 #include "upstream_rx_endpoint.h"
 
+#include "dplane_classify.h"
 #include "packet.h"
 #include "wifi_rx.h"
 
@@ -51,6 +52,10 @@ void upstream_rx_endpoint::poll_peer()
             return;
         }
         if (from.sin_addr.s_addr == 0 || from.sin_port == 0)
+        {
+            continue;
+        }
+        if (dplane_classify(static_cast<uint32_t>(n)) != dplane_kind::registration)
         {
             continue;
         }
@@ -126,9 +131,9 @@ bool upstream_rx_endpoint::start(wifi_rx& rx, BaseType_t core,
     {
         return true;
     }
-    if (!sock_.open_udp(0, DPLANE_RX_PORT))
+    if (!sock_.open_udp(0, DPLANE_PORT))
     {
-        ESP_LOGE(TAG, "udp bind %u failed: %d", DPLANE_RX_PORT, errno);
+        ESP_LOGE(TAG, "udp bind %u failed: %d", DPLANE_PORT, errno);
         sock_.close();
         return false;
     }
@@ -141,7 +146,7 @@ bool upstream_rx_endpoint::start(wifi_rx& rx, BaseType_t core,
         drain_task_handle_ = nullptr;
         return false;
     }
-    ESP_LOGI(TAG, "air->UDP %u drain core=%d prio=%u", DPLANE_RX_PORT,
+    ESP_LOGI(TAG, "air->UDP %u drain core=%d prio=%u", DPLANE_PORT,
              static_cast<int>(core), static_cast<unsigned>(prio));
     return true;
 }

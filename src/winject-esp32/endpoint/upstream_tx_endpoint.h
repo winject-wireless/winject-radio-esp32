@@ -9,9 +9,9 @@
 
 class wifi_tx;
 
-// D-plane inject: EMAC input frames that are IPv4/UDP to DPLANE_INJECT_PORT
-// are taken out of the lwIP path and their payload (one raw MPDU) is queued on
-// wifi_tx without a copy. Everything else goes to the netif.
+// D-plane on DPLANE_PORT: 24–1472 byte UDP payloads are hijacked at L2 for
+// inject (queued on wifi_tx without a copy). 1–23 byte payloads are left for
+// lwIP (peer registration on the same port). Everything else goes to the netif.
 class upstream_tx_endpoint
 {
 public:

@@ -36,12 +36,10 @@
 // UDP management plane (m-plane) console.
 #define CONTROL_CONSOLE_PORT 22
 
-// D-plane UDP ports (fixed; the manager must use the same values).
-// Inject: Ethernet UDP payload = one raw 802.11 MPDU, hijacked at L2.
-// RX: air MPDUs + 4-byte FCS are sent to the peer that last sent any datagram
-// to this port.
-#define DPLANE_INJECT_PORT 9000
-#define DPLANE_RX_PORT 9210
+// D-plane UDP port (fixed; the manager must use the same value).
+// 1–23 byte payloads register the forward peer; 24–1472 byte payloads are
+// MPDUs hijacked at L2 for inject; forwarded air frames are sent from this port.
+#define DPLANE_PORT 9000
 // Largest MPDU in one unfragmented inject datagram (1500 MTU − 20 IP − 8 UDP).
 // Larger payloads are IP-fragmented and rejected by the inject hijack.
 #define DPLANE_INJECT_MPDU_MAX 1472
