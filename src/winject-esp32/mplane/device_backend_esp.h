@@ -23,7 +23,6 @@ public:
     device_backend_esp& operator=(const device_backend_esp&) = delete;
 
     mplane_status restart(std::optional<WinjectMode> mode) override;
-    mplane_status accept_reset_id(uint8_t id) override;
 
     network_config network() const override;
     mplane_status set_network(const network_config& cfg) override;

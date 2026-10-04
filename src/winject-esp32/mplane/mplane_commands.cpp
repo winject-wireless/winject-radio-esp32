@@ -87,7 +87,7 @@ bool parse_optional_mac(const char* value, std::optional<mac_address>* out)
 const mplane_commands::command mplane_commands::k_commands[] = {
     {"help", "?", "", needs::device, &mplane_commands::cmd_help},
     {"ping", "p", "", needs::device, &mplane_commands::cmd_ping},
-    {"reset", "r", "[id=<u8>] [mode=WINJECT|OTA]", needs::device,
+    {"reset", "r", "[mode=WINJECT|OTA]", needs::device,
      &mplane_commands::cmd_reset},
     {"save", nullptr, "<slot 0-9>  (network, radio, rx filter, tune)",
      needs::device, &mplane_commands::cmd_save},
@@ -241,7 +241,7 @@ void mplane_commands::cmd_ping(char* args, mplane_reply& reply)
 
 void mplane_commands::cmd_reset(char* args, mplane_reply& reply)
 {
-    static const char* const k_keys[] = {"mode", "id", nullptr};
+    static const char* const k_keys[] = {"mode", nullptr};
     mplane_args kv;
     if (!parse_args(args, k_keys, &kv))
     {
@@ -266,41 +266,13 @@ void mplane_commands::cmd_reset(char* args, mplane_reply& reply)
             return;
         }
     }
-    std::optional<uint8_t> reset_id;
-    const char* id_val = kv.find("id");
-    if (id_val != nullptr)
-    {
-        unsigned long id = 0;
-        if (!mplane_parse_uint(id_val, 0, 255, &id))
-        {
-            reply.nok(mplane_status::invalid);
-            return;
-        }
-        reset_id = static_cast<uint8_t>(id);
-    }
-    if (reset_id.has_value())
-    {
-        const mplane_status id_st = device_.accept_reset_id(*reset_id);
-        if (id_st != mplane_status::ok)
-        {
-            reply.nok(id_st);
-            return;
-        }
-    }
     const mplane_status st = device_.restart(mode);
     if (st != mplane_status::ok)
     {
         reply.nok(st);
         return;
     }
-    if (reset_id.has_value())
-    {
-        reply.print("OK id=%u\n", static_cast<unsigned>(*reset_id));
-    }
-    else
-    {
-        reply.ok();
-    }
+    reply.ok();
 }
 
 void mplane_commands::handle_slot(char* args, bool save, mplane_reply& reply)

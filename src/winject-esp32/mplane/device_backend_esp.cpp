@@ -38,19 +38,6 @@ void device_backend_esp::restart_cb(void* arg)
     esp_restart();
 }
 
-mplane_status device_backend_esp::accept_reset_id(uint8_t id)
-{
-    if (store_.reset_id_is_duplicate(id))
-    {
-        return mplane_status::already;
-    }
-    if (!store_.store_reset_id(id))
-    {
-        return mplane_status::io_error;
-    }
-    return mplane_status::ok;
-}
-
 mplane_status device_backend_esp::restart(std::optional<WinjectMode> mode)
 {
     if (mode && !store_.set_boot_mode(*mode))

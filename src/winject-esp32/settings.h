@@ -40,8 +40,6 @@ public:
 
     bool set_boot_mode(WinjectMode mode);
 
-    bool reset_id_is_duplicate(uint8_t id) const;
-    bool store_reset_id(uint8_t id);
     // Writes slot and makes it current, so it is applied at next boot.
     bool save_slot(uint8_t slot, const settings_snapshot& snap);
     read_result read_slot(uint8_t slot, settings_snapshot* out);
@@ -53,8 +51,6 @@ private:
     WinjectMode boot_mode_ = WINJECT_MODE_STANDALONE;
     uint8_t current_slot_ = 0;
     settings_snapshot boot_;
-    bool last_reset_id_valid_ = false;
-    uint8_t last_reset_id_ = 0;
 };
 
 #endif  // WINJECT_SETTINGS_H_

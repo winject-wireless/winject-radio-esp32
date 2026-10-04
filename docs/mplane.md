@@ -32,7 +32,7 @@ Command names, aliases, and argument keys are matched **case-insensitively**. Ar
 
 ### Request correlation (`cmd:<u8>`)
 
-**winject-manager** (and other L3 clients) prefix each forwarded line with **`cmd:<u8>`** so replies can be paired with the request. This id is only for request/response correlation; idempotent commands still use **`id=<u8>`** in the command body (`reset id=…`, `test_ether_tx id=…`, etc.).
+**winject-manager** (and other L3 clients) prefix each forwarded line with **`cmd:<u8>`** so replies can be paired with the request. This id is only for request/response correlation; idempotent TX test commands still use **`id=<u8>`** in the command body (`test_ether_tx id=…`, etc.). Clients confirm a successful `reset` by comparing `ts` in `tx_info` / `rx_info` with elapsed time since the request.
 
 | Direction | Wire format | Typical log |
 |-----------|-------------|-------------|
@@ -48,7 +48,7 @@ Examples:
 | `cmd:4 save 1` | `OK:4` |
 | `cmd:5 radio_tx channel=6` | `OK:5 radio_tx channel=6 tx_power=20 modulation=DSS_1M_L cca=true` |
 | `cmd:6 bogus` | `NOK:6 ENOSYS` |
-| `cmd:7 reset id=2` | `OK:7 id=2` (then reboot) |
+| `cmd:7 reset` | `OK:7` (then reboot) |
 | `cmd:8 radio_caps_info` | `OK:8 radio_caps_info fcs=SIGNAL` |
 | `cmd:9 tx_info` | `OK:9 tx_info tx_queue_sz=0 in_flight=0 …` (info replies get `OK:<u8> ` prepended) |
 
@@ -79,7 +79,7 @@ Lines without the `cmd:` prefix behave as before (no correlation fields). A malf
 | `EINVAL` | Malformed command, unknown/repeated key, value out of range, or unsupported `radio_tx` combination |
 | `ENOSYS` | Unknown command (including `radio_caps_info` on firmware older than this capability; hosts treat that as `fcs=ACTUAL` on the d-plane) |
 | `ENODEV` | Radio commands, `test_wifi_rx`, and `test_wifi_tx` while the radio is down; every radio and test command in OTA mode |
-| `EALREADY` | A TX test of the same kind is already running, or `reset id=` repeats the last accepted reset id |
+| `EALREADY` | A TX test of the same kind is already running |
 | `ESTALE` | TX test `id` repeats the last accepted start, or a stop `id` does not match the running test |
 | `ENOENT` | `load` of an empty slot |
 | `EIO` | NVS or driver failure, `load` of a corrupt or invalid slot, a test socket that cannot bind, or a test task that cannot start |
@@ -103,7 +103,7 @@ The mode is persisted by `reset mode=...` and applies from the next boot. Firmwa
 |---------|-------|-----------|-------|
 | `help` | `?` | | usage lines |
 | `ping` | `p` | | `pong` |
-| `reset` | `r` | `[id=<u8>] [mode=WINJECT\|OTA]` | `OK` or `OK id=<u8>`, then reboots (~200 ms later). With `mode`, persists the boot mode first. With `id`, the id is stored in NVS: a repeat of the same `id` replies `NOK EALREADY` and does not reboot |
+| `reset` | `r` | `[mode=WINJECT\|OTA]` | `OK`, then reboots (~200 ms later). With `mode`, persists the boot mode first |
 | `save` | | `<slot 0-9>` | `OK`; stores network, radio (incl. `rx_filter_addr3`), and tune, and makes the slot current |
 | `load` | | `<slot 0-9>` | `OK`; applies radio immediately, network right after the reply, tune on the next boot, and makes the slot current. `NOK ENOENT` if empty, `NOK EIO` if unreadable |
 | `network` | `sn` | `ip=<ip>[/<prefix>] type=dhcp\|static timeout=<0-65535>` | `OK network ip=<ip>/<prefix> type=<type> timeout=<s>` |
@@ -118,6 +118,8 @@ All `key=value` arguments are optional: omitted keys keep their value, and no ar
 **Network.** `network` applies immediately, so the radio may move to a new address right after replying. With `type=dhcp`, `ip/prefix` is the static fallback used after `timeout` seconds without a lease; `timeout=0` keeps waiting for DHCP. With `type=static`, `ip/prefix` is used directly. `ip=` without `/<prefix>` keeps the current prefix (1–32). The address must be a unicast host address (not 0/8, 127/8, multicast/reserved; for prefixes up to /30 not the network or broadcast address). Defaults: `type=dhcp ip=192.168.32.1/24 timeout=5`.
 
 **Tune.** Values are checked when set and take effect on the next boot, so the usual sequence is `tune_* ...`, `save <slot>`, `reset`. The commands report the configured values, not the running ones.
+
+**Reset.** After `OK`, the firmware reboots in about 200 ms. There is no idempotency `id=` on `reset`; `id=` is an unknown key and replies `NOK EINVAL`. If a client sends `reset` and never sees `OK` (timeout or lost reply), it should not blindly resend: note the time `t0`, poll `tx_info` or `rx_info` until the radio answers, then compare `ts` (uptime in µs, near zero after every boot) with elapsed time since `t0`. If `ts` is less than that elapsed interval, the radio restarted after the request (from this `reset`, a watchdog, or a crash) and the client can treat the reboot as done; if `ts` is still large, the radio was up the whole time and sending `reset` again is safe. **winject-manager** uses this rule instead of a stored reset id.
 
 | Key | Range | Default | Effect |
 |-----|-------|---------|--------|

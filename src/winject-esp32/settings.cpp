@@ -13,7 +13,6 @@ static const char* TAG = "settings";
 static const char* k_nvs_ns = "winject";
 static const char* k_current_key = "cur";
 static const char* k_mode_key = "mode";
-static const char* k_reset_id_key = "rst_id";
 
 namespace
 {
@@ -150,11 +149,6 @@ void settings::load_boot()
                     ESP_LOGW(TAG, "ignoring stored mode %u", v);
                 }
             }
-            if (nvs_get_u8(nvs.get(), k_reset_id_key, &v) == ESP_OK)
-            {
-                last_reset_id_valid_ = true;
-                last_reset_id_ = v;
-            }
         }
     }
 
@@ -191,37 +185,6 @@ const settings_snapshot& settings::boot() const
 uint8_t settings::current_slot() const
 {
     return current_slot_;
-}
-
-bool settings::reset_id_is_duplicate(uint8_t id) const
-{
-    return last_reset_id_valid_ && last_reset_id_ == id;
-}
-
-bool settings::store_reset_id(uint8_t id)
-{
-    if (reset_id_is_duplicate(id))
-    {
-        return false;
-    }
-    const nvs_session nvs(true);
-    if (!nvs.ok())
-    {
-        return false;
-    }
-    const esp_err_t err = nvs_set_u8(nvs.get(), k_reset_id_key, id);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "set reset id %u failed: %s", id, esp_err_to_name(err));
-        return false;
-    }
-    if (!commit(nvs, "rst_id"))
-    {
-        return false;
-    }
-    last_reset_id_valid_ = true;
-    last_reset_id_ = id;
-    return true;
 }
 
 bool settings::set_boot_mode(WinjectMode mode)

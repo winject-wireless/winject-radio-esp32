@@ -102,9 +102,6 @@ public:
     // Persists `mode` when given, then restarts after the reply is flushed.
     virtual mplane_status restart(std::optional<WinjectMode> mode) = 0;
 
-    // `reset id=<u8>` idempotency (persisted on device).
-    virtual mplane_status accept_reset_id(uint8_t id) = 0;
-
     virtual network_config network() const = 0;
     virtual mplane_status set_network(const network_config& cfg) = 0;
 

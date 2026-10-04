@@ -52,17 +52,6 @@ public:
         return mplane_status::ok;
     }
 
-    mplane_status accept_reset_id(uint8_t id) override
-    {
-        if (last_reset_id_valid_ && last_reset_id_ == id)
-        {
-            return mplane_status::already;
-        }
-        last_reset_id_valid_ = true;
-        last_reset_id_ = id;
-        return mplane_status::ok;
-    }
-
     network_config network() const override
     {
         return network_;
@@ -113,8 +102,6 @@ public:
     int64_t uptime_us_ = 123456789;
     std::optional<WinjectMode> restart_mode;
     int saved_slot = -1;
-    bool last_reset_id_valid_ = false;
-    uint8_t last_reset_id_ = 0;
 
 private:
     network_config network_;
@@ -378,10 +365,8 @@ TEST_F(MplaneCommandsTest, ResetWithAndWithoutMode)
     EXPECT_EQ(run("r mode=WINJECT"), "OK\n");
     EXPECT_EQ(*device.restart_mode, WINJECT_MODE_STANDALONE);
     EXPECT_EQ(run("reset mode=STANDALONE"), "NOK EINVAL\n");
-    EXPECT_EQ(run("reset id=3"), "OK id=3\n");
-    EXPECT_EQ(run("reset id=3"), "NOK EALREADY\n");
-    EXPECT_EQ(run("reset id=4"), "OK id=4\n");
-    EXPECT_EQ(device.restarts, 5);
+    EXPECT_EQ(run("reset id=3"), "NOK EINVAL\n");
+    EXPECT_EQ(device.restarts, 3);
 }
 
 TEST_F(MplaneCommandsTest, SaveAndLoadSlots)
@@ -618,7 +603,7 @@ TEST_F(MplaneCommandsTest, CmdPrefixCorrelation)
     EXPECT_EQ(run("cmd:x ping"), "NOK EINVAL\n");
     EXPECT_EQ(run("cmd:7"), "NOK EINVAL\n");
     EXPECT_EQ(run("ping"), "pong\n");
-    EXPECT_EQ(run("cmd:8 reset id=9"), "OK:8 id=9\n");
+    EXPECT_EQ(run("cmd:8 reset"), "OK:8\n");
 }
 
 TEST_F(MplaneCommandsTest, WifiTxStartAndStop)

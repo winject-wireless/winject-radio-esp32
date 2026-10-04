@@ -33,7 +33,7 @@ The radio is a bridge between one Ethernet port and one 2.4 GHz WiFi PHY. It doe
 `app_main` (`src/winject-esp32/main.cpp`) brings components up in an order that keeps a rescue path alive if anything later fails:
 
 1. NVS, `esp_netif`, default event loop. Failure here idles forever (nothing else can work).
-2. `settings::load_boot()` reads the current slot: network, radio, `rx_filter_addr3`, tune, boot mode.
+2. `settings::load_boot()` reads boot mode, current slot index, and the slot blob (network, radio, `rx_filter_addr3`, tune) from NVS namespace `winject`.
 3. Network manager: Ethernet PHY, DHCP client with static fallback. Installs the d-plane inject hijack on the EMAC input path (it passes everything to lwIP until a sink is attached).
 4. HTTP OTA, **before** WiFi, so a radio that fails to start still accepts a new image.
 5. Boot mode:
@@ -53,7 +53,7 @@ The radio is a bridge between one Ethernet port and one 2.4 GHz WiFi PHY. It doe
 | `upstream_tx_endpoint::set_sink(tx)` | Arms the UDP 9000 hijack |
 | `upstream_rx_endpoint::start(rx)` | Binds UDP 9210 and starts the forward task |
 
-All tune values (queue, pool, and ring sizes, EMAC DMA burst) are applied **only at boot**; `save` then `reset` to change them.
+All tune values (queue, pool, and ring sizes, EMAC DMA burst) are applied **only at boot**; `save` then `reset` to change them. Whether a `reset` completed when the `OK` was lost is inferred from `ts` in `tx_info` / `rx_info`, not from an m-plane argument; see [mplane.md](./mplane.md#device).
 
 ## Cores, tasks, and priorities
 
