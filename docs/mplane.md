@@ -190,7 +190,7 @@ Traffic generators and counters for link bring-up and throughput checks. Every t
 | `test_wifi_tx` | `twt` | `[id=<u8>] [addr1=<mac>] [addr2=<mac>] [addr3=<mac>] mtu=<24-1500> count=<u16> [rate=<kbps>]` | `OK` |
 | `test_wifi_rx_stat` | `twrs` | `[clear=<bool>]` | `test_wifi_rx_stat pkt=<n> byt=<n> fec_error_pkt=<n>` |
 
-**Ethernet RX.** `test_ether_rx port=<p>` binds a UDP socket and counts every datagram and its payload bytes. Ports 22, 80, 9000, and 9210 are refused (`NOK EINVAL`).
+**Ethernet RX.** `test_ether_rx port=<p>` binds a UDP socket and counts every datagram and its payload bytes. Ports 22, 80, and 9000 are refused (`NOK EINVAL`).
 
 **Ethernet TX.** `test_ether_tx` sends `count` UDP datagrams of `mtu` payload bytes to `host:port` in the background. The first 4 payload bytes are a little-endian sequence number. `rate` (0–1000000 kbit/s, counted on payload bytes) paces the sends; `rate=0` or omitted sends as fast as possible.
 
@@ -202,10 +202,15 @@ Traffic generators and counters for link bring-up and throughput checks. Every t
 
 ## D-plane
 
-| Direction | Port | Behavior |
-|-----------|------|----------|
-| Inject (host -> air) | UDP **9000** (`DPLANE_INJECT_PORT`) | Each datagram is one MPDU (24–1472 bytes over Ethernet, one unfragmented UDP datagram on a 1500-byte MTU link; header included, no FCS), sent unicast to the radio's own MAC and IPv4 address. IP fragments are not reassembled. The frame is taken straight from the Ethernet RX path, never by the IP stack |
-| Forward (air -> host) | UDP **9210** (`DPLANE_RX_PORT`) | Any datagram sent to this port registers its source as the forward peer; the most recent sender wins. Each accepted received frame is sent as the MPDU followed by a **4-byte trailer** whose meaning is given by `radio_caps_info fcs=` (query once per radio; `NOK ENOSYS` means legacy `ACTUAL`). Layout is always `MPDU \|\| 4 bytes`; only the trailer semantics differ. In both modes, FAIL frames are still forwarded so the receiver can count them; strip the trailer before using the MPDU |
+UDP **9000** (`DPLANE_PORT`) on the radio's IPv4 address:
+
+| Payload size | Meaning |
+|--------------|---------|
+| 1–23 bytes | Registration: source becomes the forward peer; most recent sender wins |
+| 24–1472 bytes | MPDU to inject (unicast to the radio's MAC and IPv4; taken on the Ethernet RX path before lwIP; IP fragments are not reassembled) |
+| 0 bytes, over 1472 | Consumed on Ethernet where applicable and counted as invalid; not injected |
+
+Each accepted received frame is forwarded to the registered peer as **MPDU ‖ 4-byte trailer** (`radio_caps_info fcs=`). Layout is always `MPDU \|\| 4 bytes`; only the trailer semantics differ. In both modes, FAIL frames are still forwarded so the receiver can count them; strip the trailer before using the MPDU |
 
 | `fcs=` | Trailing 4 bytes | Receiver check |
 |--------|------------------|----------------|
