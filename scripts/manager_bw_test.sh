@@ -5,7 +5,7 @@
 #
 # Radios forward the shared domain (rx_filter_addr3); the managers stamp two
 # bus pairs (b2/a1 for A→B, c3/d4 for B→A). Edit the cfg files for radio IPs / host
-# local_ip, or pass --a/--b/--host (or legacy positional RADIO_A RADIO_B HOST).
+# or pass --a/--b/--host (or legacy positional RADIO_A RADIO_B HOST).
 #
 # Usage (default --modulation OFDM_24M when omitted — peer promisc RX path):
 #   ./scripts/manager_bw_test.sh --a 192.168.253.9 --b 192.168.253.14 --no-cca
@@ -221,18 +221,17 @@ else
 fi
 
 patch_conf() {
-  local file="$1" device="$2" gci_in="$3" gci_out="$4"
+  local file="$1" device="$2" gci_in="$3"
   sed -e "s/^winject\.device.*/winject.device        = ${device}/" \
-      -e "s/^winject\.local_ip.*/winject.local_ip      = ${HOST_IP}/" \
+      -e "s/^winject\.skip_console.*/winject.skip_console  = 0/" \
       "$file"
   printf 'manager.console_in    = 127.0.0.1:%s\n' "$gci_in"
-  printf 'manager.console_out   = 127.0.0.1:%s\n' "$gci_out"
 }
 
 CONF_A_RUN="$LOG_DIR/winject_a.conf"
 CONF_B_RUN="$LOG_DIR/winject_b.conf"
-patch_conf "$CONF_A" "$RADIO_A" 2400 2401 >"$CONF_A_RUN"
-patch_conf "$CONF_B" "$RADIO_B" 2410 2411 >"$CONF_B_RUN"
+patch_conf "$CONF_A" "$RADIO_A" 2400 >"$CONF_A_RUN"
+patch_conf "$CONF_B" "$RADIO_B" 2410 >"$CONF_B_RUN"
 # 10 Mbps profile sweep: manager tick cap 4 on A side (default in tree).
 if [[ "$BENCH_PROFILE" == "10mbps" && -z "$MGR_MAX_DATA_PER_TICK" ]]; then
   if grep -q '^winject\.max_data_per_tick' "$CONF_A_RUN"; then

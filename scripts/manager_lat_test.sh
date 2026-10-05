@@ -153,7 +153,6 @@ trap cleanup EXIT INT TERM
 patch_conf() {
   local src="$1" device="$2" dest="$3"
   sed -e "s/^winject\.device.*/winject.device        = ${device}/" \
-      -e "s/^winject\.local_ip.*/winject.local_ip      = ${HOST_IP}/" \
       "$src" >"$dest"
 }
 

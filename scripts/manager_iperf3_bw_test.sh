@@ -248,7 +248,7 @@ fi
 
 ensure_winject_manager "$ROOT"
 
-echo "configuring radios (fixed forward ports 9210/9220)..."
+echo "configuring radios (d-plane ports from cfg)..."
 python3 "$ROOT/scripts/prepare_radios_for_manager.py" \
   --a "$RADIO_A" --b "$RADIO_B" --verbose \
   "${PREP_EXTRA[@]+"${PREP_EXTRA[@]}"}" || exit 1
@@ -256,7 +256,6 @@ python3 "$ROOT/scripts/prepare_radios_for_manager.py" \
 patch_conf() {
   local file="$1" device="$2"
   sed -e "s/^winject\.device.*/winject.device        = ${device}/" \
-      -e "s/^winject\.local_ip.*/winject.local_ip      = ${HOST_IP}/" \
       "$file"
 }
 

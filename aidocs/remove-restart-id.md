@@ -1,6 +1,6 @@
 # Plan: remove the `reset id=` idempotency id; clients use `ts`
 
-**Status:** Implemented in **winject-radio-esp32** (firmware, host tests, `docs/mplane.md`). **winject-radio-realtek** still needs the vendored m-plane sync and backend/settings cleanup below.
+**Status:** Implemented in **winject-radio-esp32** and **winject-radio-realtek** (shared m-plane, host/unit tests, `docs/mplane.md`).
 
 ## Goal
 
