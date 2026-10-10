@@ -16,7 +16,7 @@ The radio is a bridge between one Ethernet port and one 2.4 GHz WiFi PHY. It doe
                          │                                                                      │ TX-done cb
                          └──▶ lwIP (everything else: m-plane :22, OTA :80, DHCP, ARP, ICMP)
 
- host ◀──UDP:9210──  dplane_rx task ◀─ wifi_rx queue ◀─ promiscuous cb ◀───────────────────────────── air
+ host ◀──UDP:9000──  dplane_rx task ◀─ wifi_rx queue ◀─ promiscuous cb ◀───────────────────────────── air
                      (upstream_rx_endpoint)  (rx_queue_sz)  (Addr3 filter, copy into RX pool,
                                                              append 4-byte fcs=SIGNAL trailer)
 ```
@@ -24,8 +24,7 @@ The radio is a bridge between one Ethernet port and one 2.4 GHz WiFi PHY. It doe
 | Plane | Transport | Purpose |
 |-------|-----------|---------|
 | m-plane | UDP 22 | Text commands: radio settings, tuning, counters, tests, reset ([mplane.md](./mplane.md)) |
-| d-plane inject | UDP 9000 | One raw MPDU per datagram, host → air |
-| d-plane forward | UDP 9210 | One received MPDU + 4-byte trailer per datagram, air → host |
+| d-plane | UDP 9000 (`DPLANE_PORT`) | One datagram is one of: a raw MPDU to inject (24–1472 bytes, host → air), a peer registration (1–23 bytes), or, in the other direction, one received MPDU + 4-byte trailer (air → host) |
 | OTA | HTTP 80 | Firmware update and rescue |
 
 ## Boot and modes
@@ -51,7 +50,7 @@ The radio is a bridge between one Ethernet port and one 2.4 GHz WiFi PHY. It doe
 | `apply_radio(boot.radio, boot.rx_filter)` | Applies the saved channel / power / modulation / CCA / filter |
 | `wifi_tx::start()` | Starts the inject task |
 | `upstream_tx_endpoint::set_sink(tx)` | Arms the UDP 9000 hijack |
-| `upstream_rx_endpoint::start(rx)` | Binds UDP 9210 and starts the forward task |
+| `upstream_rx_endpoint::start(rx)` | Binds UDP 9000 and starts the forward task |
 
 All tune values (queue, pool, and ring sizes, EMAC DMA burst) are applied **only at boot**; `save` then `reset` to change them. Whether a `reset` completed when the `OK` was lost is inferred from `ts` in `tx_info` / `rx_info`, not from an m-plane argument; see [mplane.md](./mplane.md#device).
 
@@ -163,10 +162,10 @@ ESP-IDF strips the on-air FCS from the promiscuous payload ([esp-idf#6473](https
 
 ### Forward task
 
-`upstream_rx_endpoint` (`endpoint/upstream_rx_endpoint.cpp`) binds UDP 9210 and runs `dplane_rx` on core 1:
+`upstream_rx_endpoint` (`endpoint/upstream_rx_endpoint.cpp`) binds UDP 9000 (`DPLANE_PORT`, the same port as inject) and runs `dplane_rx` on core 1:
 
 - Pop a frame (blocking), pulse the RX LED.
-- Every 10 ms (and whenever there is no peer) drain any datagrams sent to 9210 without blocking; the **source of the last one** becomes the forward peer. The host keeps the registration alive by sending to 9210 periodically (bench tools use 1 s).
+- Every 10 ms (and whenever there is no peer) drain any datagrams sent to 9000 without blocking; the **source of the last registration** (a 1–23 byte datagram; see `dplane_classify`) becomes the forward peer. The host keeps the registration alive by sending to 9000 periodically (bench tools use 1 s).
 - `sendto` the frame to the peer. No peer → `dropped_no_peer`; send error (for example lwIP out of buffers) → `dropped_send_failed`; success → `ether_pkt`.
 - Release the pool slot.
 
@@ -296,6 +295,6 @@ Boot-time knobs that interact with this (m-plane `tune_*`, see [mplane.md](./mpl
 | `src/winject-esp32/radio/indicator_led.h` | TX/RX activity LEDs (GPIO17 / GPIO5, 20 ms stretch) |
 | `src/winject-esp32/endpoint/upstream_tx_endpoint.*` | EMAC input hijack, UDP 9000 |
 | `src/winject-esp32/endpoint/udp_l2_match.h` | IPv4/UDP frame matcher (host-tested) |
-| `src/winject-esp32/endpoint/upstream_rx_endpoint.*` | UDP 9210 peer registration and forward task |
+| `src/winject-esp32/endpoint/upstream_rx_endpoint.*` | UDP 9000 peer registration and forward task |
 | `src/winject-esp32/mplane/radio_backend_esp.*` | m-plane bindings for radio settings and counters |
 | `src/winject-esp32/diag/wifi_tx_test.*` | `test_wifi_tx` generator into `wifi_tx` |

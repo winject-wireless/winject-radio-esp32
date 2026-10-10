@@ -2,7 +2,7 @@
 """WT32-ETH01 STANDALONE two-radio UDP bandwidth test.
 
 Host stamps 802.11 MPDUs (tools/mpdu.py), injects to each radio's d-plane
-port 9000, and registers on port 9210 to receive forwarded MPDU + FCS.
+port 9000, and registers on the same port to receive forwarded MPDU + FCS.
 Buses isolate A→B vs B→A. No winject-manager.
 
     python3 scripts/stand_alone_test.py --a 192.168.253.9 --b 192.168.253.14

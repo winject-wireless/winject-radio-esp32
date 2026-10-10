@@ -50,8 +50,7 @@ PHY defaults match WT32-ETH01 (LAN8720 addr `1`, MDC `23`, MDIO `18`, power `16`
 | Service | Port |
 |---------|------|
 | m-plane (UDP console) | 22 |
-| d-plane inject (UDP → 802.11) | 9000 |
-| d-plane RX (802.11 → UDP) | 9210 |
+| d-plane (inject, peer registration, forward) | 9000 |
 | HTTP OTA | 80 |
 
 ## Security

@@ -165,7 +165,7 @@ All `key=value` arguments are optional: omitted keys keep their value, and no ar
 | `rx_queue_sz` | Frames waiting to be forwarded to the host |
 | `dropped_filter_mismatched` | Promiscuous callbacks not forwarded (wrong type, A-MPDU, length, or Addr3 filter) |
 | `dropped_rx_queue` | Addr3-matched frames dropped because the RX queue or pool was full |
-| `dropped_no_peer` | Frames drained while no host had registered on UDP :9210 |
+| `dropped_no_peer` | Frames drained while no host had registered on UDP :9000 |
 | `dropped_send_failed` | Forward attempts where `sendto` failed |
 | `ether_pkt` | Frames successfully sent to the registered host |
 | `air_pkt` | Every frame the promiscuous filter delivers (data, misc, and FCS-failed frames on the channel, including other networks' traffic) |
