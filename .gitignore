@@ -16,3 +16,4 @@ managed_components/
 Thumbs.db
 __pycache__/
 scripts/.venv/
+build/
