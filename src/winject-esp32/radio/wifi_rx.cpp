@@ -242,9 +242,9 @@ void wifi_rx::promiscuous_cb(void* buf, wifi_promiscuous_pkt_type_t type)
 bool wifi_rx::apply_monitor()
 {
     wifi_promiscuous_filter_t filter = {};
-    // Raw-inject peers are delivered as DATA/MISC with spurious rx_state==0x41.
-    // FCSFAIL must stay enabled on ESP32 or Addr3-matched inject frames never
-    // reach the CB; the forwarded FCS lets the peer judge integrity.
+    // FCSFAIL stays enabled so frames that fail the FCS still reach the CB and
+    // are forwarded with a FAIL trailer; the peer judges integrity. Non-zero
+    // rx_state (0x41 on the bench) is a real failure, not a spurious flag.
     filter.filter_mask = WIFI_PROMIS_FILTER_MASK_DATA |
                          WIFI_PROMIS_FILTER_MASK_DATA_MPDU |
                          WIFI_PROMIS_FILTER_MASK_DATA_AMPDU |

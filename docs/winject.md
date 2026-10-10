@@ -137,7 +137,7 @@ This timeshares memory bandwidth between the WiFi DMA and the EMAC DMA; see [ETH
 
 `wifi_rx::apply_monitor()` enables promiscuous mode with the filter mask `DATA | DATA_MPDU | DATA_AMPDU | MISC | FCSFAIL`.
 
-- **FCSFAIL must stay on.** On ESP32, raw-injected frames from a peer arrive with a spurious non-zero `rx_state` (often `0x41`); without `FCSFAIL` they never reach the callback. Integrity is reported to the host in the trailer instead of being enforced here.
+- **FCSFAIL stays on** so frames that fail the FCS still reach the callback and the host sees them as FAIL in the trailer; integrity is judged by the host, not enforced here. A non-zero `rx_state` is a real failure: `0x41` is the only value seen on the bench, and a CRC-pattern test (2026-10-10) found all but 3 of about 13,000 `0x41` frames corrupt and every `rx_state == 0` frame intact.
 - **MISC / CTRL accepted.** HT (MCS) injected frames can be classified as `MISC` or `CTRL`.
 - **RX A-MPDU on, TX A-MPDU off.** `ampdu_rx_enable=1` is required or promiscuous mode never sees MCS4–7 frames; inject is always one MPDU per call, so TX aggregation and A-MSDU are off.
 
